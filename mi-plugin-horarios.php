@@ -83,7 +83,7 @@ function mi_plugin_horarios_activate() {
     require_once MI_PLUGIN_HORARIOS_PATH . 'includes/post-types.php';
     require_once MI_PLUGIN_HORARIOS_PATH . 'includes/taxonomies.php';
     mph_register_post_types(); // Llamamos a la función que registrará los CPTs (la crearemos pronto)
-    // mph_register_taxonomies(); // Llamamos a la función que registrará las taxonomías (la crearemos pronto)
+    mph_register_taxonomies(); // Llamamos a la función que registrará las taxonomías (la crearemos pronto)
     flush_rewrite_rules();
 }
 register_activation_hook( __FILE__, 'mi_plugin_horarios_activate' );
