@@ -158,7 +158,7 @@ function mph_register_sede_taxonomy() {
 
 function mph_register_rango_de_edad_taxonomy() {
 
-    // Define las etiquetas para la taxonomía 'rango_de_edad'.
+    // Define las etiquetas para la taxonomía 'rango_edad'.
     $labels = array(
         'name'                       => _x( 'Rangos de  Edades', 'Taxonomy General Name', 'mi-plugin-horarios' ),
         'singular_name'              => _x( 'Rango de  Edad', 'Taxonomy Singular Name', 'mi-plugin-horarios' ),
@@ -188,7 +188,7 @@ function mph_register_rango_de_edad_taxonomy() {
         // 'hierarchical' = true simula el comportamiento de las Categorías (jerarquía padre/hijo).
         // 'hierarchical' = false simula el comportamiento de las Etiquetas (nube de tags, no jerárquico).
         // Para Rangos de  Edades, podríamos querer agruparlos (ej. Instrumento > Nivel), así que ponemos true. Ajusta si prefieres que sea no jerárquico.
-        'hierarchical'               => false,
+        'hierarchical'               => true,
         'public'                     => true, // Hace la taxonomía visible en el frontend.
         'show_ui'                    => true, // Muestra la interfaz de usuario en el admin (ej. un submenú bajo 'Maestros').
         'show_admin_column'          => true, // Muestra una columna con los términos asignados en la tabla de listado del CPT asociado ('Maestros').
@@ -197,15 +197,15 @@ function mph_register_rango_de_edad_taxonomy() {
         'show_in_rest'               => true, // Habilita la taxonomía en la API REST.
         // 'rewrite' controla las URLs de los archivos de esta taxonomía.
         'rewrite'                    => array(
-            'slug'         => 'rango_de_edads', // URL base (ej. tusitio.com/rango_de_edads/nombre-rango_de_edad/).
+            'slug'         => 'rango_edad', // URL base (ej. tusitio.com/rango_de_edads/nombre-rango_de_edad/).
             'with_front'   => false, // No prefijar con la estructura de permalinks base.
             'hierarchical' => true, // Permite URLs tipo /rango_de_edads/padre/hijo/ si es jerárquica.
         ),
     );
 
-    // Registra la taxonomía 'rango_de_edad'.
+    // Registra la taxonomía 'rango_edad'.
     // El primer parámetro es el identificador único (slug) de la taxonomía.
     // El segundo parámetro es el CPT (o array de CPTs) al que se asociará esta taxonomía.
-    register_taxonomy( 'rango_de_edad', array( 'maestro' ), $args );
+    register_taxonomy( 'rango_edad', array( 'maestro' ), $args );
 
 }

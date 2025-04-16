@@ -209,11 +209,30 @@ function mph_render_horario_modal_html( $post ) {
                      <input type="number" id="mph_vacantes" name="vacantes" min="0" step="1" value="1" style="width: 60px;">
                  </p>
 
-                 <p>
-                     <label for="mph_buffer_tiempo"><?php esc_html_e( 'Tiempo "Mismo o Traslado" (Antes y Después):', 'mi-plugin-horarios' ); ?></label><br>
-                     <input type="number" id="mph_buffer_minutos" name="buffer_minutos" min="0" step="15" value="60" style="width: 70px;"> <?php esc_html_e( 'minutos', 'mi-plugin-horarios' ); ?>
-                     <small><?php esc_html_e( '(Tiempo reservado alrededor de la clase asignada)', 'mi-plugin-horarios' ); ?></small>
-                 </p>
+                 <fieldset class="mph-buffer-tiempo">
+                         <legend><?php esc_html_e( 'Tiempo "Mismo o Traslado":', 'mi-plugin-horarios' ); ?></legend>
+                         <p>
+                             <label for="mph_buffer_minutos_antes">
+                                 <?php esc_html_e( 'Antes:', 'mi-plugin-horarios' ); ?>
+                                 <input type="number" id="mph_buffer_minutos_antes" name="buffer_minutos_antes" min="0" step="15" value="60" style="width: 70px;">
+                                 <?php esc_html_e( 'minutos', 'mi-plugin-horarios' ); ?>
+                             </label>
+                         </p>
+                         <p>
+                             <label for="mph_buffer_minutos_despues">
+                                 <?php esc_html_e( 'Después:', 'mi-plugin-horarios' ); ?>
+                                 <input type="number" id="mph_buffer_minutos_despues" name="buffer_minutos_despues" min="0" step="15" value="60" style="width: 70px;">
+                                 <?php esc_html_e( 'minutos', 'mi-plugin-horarios' ); ?>
+                             </label>
+                         </p>
+                         <p>
+                             <label for="mph_buffer_linkeado">
+                                 <input type="checkbox" id="mph_buffer_linkeado" name="buffer_linkeado" value="1" checked="checked">
+                                 <?php esc_html_e( 'Mantener tiempos iguales (linkeados)', 'mi-plugin-horarios' ); ?>
+                             </label>
+                         </p>
+                          <small><?php esc_html_e( '(Tiempo reservado alrededor de la clase asignada)', 'mi-plugin-horarios' ); ?></small>
+                     </fieldset>
 
             </div> <?php // Fin de .mph-asignacion-especifica ?>
 
@@ -242,32 +261,71 @@ function mph_render_horario_modal_html( $post ) {
  * @param string $taxonomy_slug Slug de la taxonomía (ej. 'programa').
  * @param array $allowed_term_ids Array de IDs de términos permitidos para este maestro.
  */
-function mph_render_taxonomy_checkboxes( $taxonomy_slug, $allowed_term_ids ) {
-    if ( empty( $allowed_term_ids ) ) {
-         echo '<em>' . esc_html__( 'No hay términos asignados a este maestro.', 'mi-plugin-horarios' ) . '</em>';
-         return;
+
+function mph_render_taxonomy_checkboxes( $taxonomy_slug, $assigned_term_ids ) {
+
+    // 1. Obtener términos comunes para esta taxonomía
+    $common_terms_query_args = array(
+        'taxonomy'   => $taxonomy_slug,
+        'hide_empty' => false,
+        'meta_query' => array(
+            array(
+                'key'     => $taxonomy_slug . '_comun', // Ej: 'programa_comun', 'sede_comun'
+                'value'   => '1', // ACF guarda '1' para True/False marcado
+                'compare' => '=',
+            ),
+        ),
+        'fields' => 'ids', // Obtener solo los IDs
+    );
+    $common_term_ids = get_terms( $common_terms_query_args );
+    if ( is_wp_error( $common_term_ids ) ) {
+        $common_term_ids = array(); // Error? Tratar como vacío
     }
 
-    $terms = get_terms( array(
-        'taxonomy'   => $taxonomy_slug,
-        'hide_empty' => false, // Mostrar todos, incluso si no tienen posts asociados aún
-        'include'    => $allowed_term_ids, // ¡Importante! Solo incluye los asignados al maestro
-    ) );
+    // 2. Combinar IDs asignados y comunes (sin duplicados)
+    $all_relevant_term_ids = array_unique( array_merge( (array) $assigned_term_ids, (array) $common_term_ids ) );
 
-    if ( is_wp_error( $terms ) || empty( $terms ) ) {
-        echo '<em>' . esc_html__( 'No se encontraron términos aplicables.', 'mi-plugin-horarios' ) . '</em>';
+    if ( empty( $all_relevant_term_ids ) ) {
+        echo '<em>' . sprintf( esc_html__( 'No hay %s asignados o comunes.', 'mi-plugin-horarios' ), $taxonomy_slug ) . '</em>';
         return;
     }
 
+    // 3. Obtener los objetos de término completos para los IDs relevantes
+    $terms = get_terms( array(
+        'taxonomy'   => $taxonomy_slug,
+        'hide_empty' => false,
+        'include'    => $all_relevant_term_ids, // Obtener solo los términos combinados
+        'orderby'    => 'name', // Ordenar alfabéticamente
+        'order'      => 'ASC',
+    ) );
+
+    if ( is_wp_error( $terms ) || empty( $terms ) ) {
+        echo '<em>' . sprintf( esc_html__( 'No se encontraron %s aplicables.', 'mi-plugin-horarios' ), $taxonomy_slug ) . '</em>';
+        return;
+    }
+
+    // 4. Renderizar los checkboxes, marcando los comunes
     echo '<ul>';
     foreach ( $terms as $term ) {
-        // Usamos name="taxonomia_slug[]" para que PHP reciba un array de los IDs seleccionados.
         $field_name = esc_attr( $taxonomy_slug ) . '_admisibles[]';
         $field_id = esc_attr( $taxonomy_slug . '_' . $term->term_id );
+        // Comprobar si este término está en la lista original de comunes para marcarlo
+        $is_common_term = in_array( $term->term_id, $common_term_ids );
+        $checked_attr = $is_common_term ? ' checked="checked"' : '';
+        // Podríamos añadir un atributo 'disabled' si quisiéramos que los comunes no se puedan desmarcar
+        // $disabled_attr = $is_common_term ? ' disabled="disabled"' : '';
+
         echo '<li>';
         echo '<label for="' . $field_id . '">';
-        echo '<input type="checkbox" name="' . $field_name . '" id="' . $field_id . '" value="' . esc_attr( $term->term_id ) . '"> ';
+        // Añadimos un input oculto para los disabled si los deshabilitamos, para asegurar que su valor se envíe
+        // if ($is_common_term && $disabled_attr) {
+        //     echo '<input type="hidden" name="' . $field_name . '" value="' . esc_attr( $term->term_id ) . '">';
+        // }
+        echo '<input type="checkbox" name="' . $field_name . '" id="' . $field_id . '" value="' . esc_attr( $term->term_id ) . '"' . $checked_attr . /* $disabled_attr . */'> ';
         echo esc_html( $term->name );
+        if ($is_common_term) {
+             echo ' <small>(' . esc_html__('Común', 'mi-plugin-horarios') . ')</small>'; // Etiqueta visual
+        }
         echo '</label>';
         echo '</li>';
     }
