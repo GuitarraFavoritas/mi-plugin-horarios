@@ -98,7 +98,7 @@ function mph_admin_enqueue_scripts( $hook ) {
         $todos_rangos_data = array();
         if ( !is_wp_error($todos_rangos_terms) && !empty($todos_rangos_terms) ) {
             foreach ( $todos_rangos_terms as $term ) {
-                $es_comun = get_field( 'rango_edad_comun', 'rango_edad' . $term->term_id ); // <-- Asegúrate que el nombre ACF sea 'rango_edad_comun'
+                $es_comun = get_field( 'rango_edad_comun', 'rango_edad_' . $term->term_id ); // <-- Asegúrate que el nombre ACF sea 'rango_edad_comun'
                 $term_data = array(
                     'term_id' => $term->term_id,
                     'name'    => $term->name,
