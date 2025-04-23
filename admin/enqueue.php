@@ -64,14 +64,16 @@ function mph_admin_enqueue_scripts( $hook ) {
             foreach ( $todos_programas_terms as $term ) {
                 // Obtener el valor del campo ACF 'programa_comun' para este término
                 // Usamos el formato 'taxonomy_' . $term_id como segundo parámetro para get_field en términos
-                $es_comun = get_field( 'programa_comun', 'programa_' . $term->term_id );
+                $es_comun_raw = get_term_meta( $term->term_id, 'programa_comun', true ); // Usar get_term_meta
+                // Convertir el resultado ('1', '0', '') a un booleano estricto para JS
+                $es_comun_bool = !empty($es_comun_raw) && $es_comun_raw === '1';
                 $term_data = array(
                     'term_id' => $term->term_id,
                     'name'    => $term->name,
                     'slug'    => $term->slug,
                     // Añadimos el valor del meta al array que pasaremos a JS
                     // get_field devuelve true/false para campos True/False de ACF
-                    'es_comun' => (bool) $es_comun
+                    'es_comun' => (bool) $es_comun_bool
                 );
                 $todos_programas_data[] = $term_data;
             }
@@ -82,12 +84,18 @@ function mph_admin_enqueue_scripts( $hook ) {
         $todas_sedes_data = array();
         if ( !is_wp_error($todas_sedes_terms) && !empty($todas_sedes_terms) ) {
             foreach ( $todas_sedes_terms as $term ) {
-                $es_comun = get_field( 'sede_comun', 'sede_' . $term->term_id ); // <-- Asegúrate que el nombre ACF sea 'sede_comun'
+                $es_comun_raw = get_term_meta( $term->term_id, 'sede_comun', true ); // Usar get_term_meta
+                $es_comun_bool = !empty($es_comun_raw) && $es_comun_raw === '1';
+                // Obtener hora cierre (la guardamos como HH:MM)
+                $hora_cierre_raw = get_term_meta( $term->term_id, 'hora_cierre', true );
+                $hora_cierre = sanitize_text_field($hora_cierre_raw); // Limpiar por si acaso
+
                 $term_data = array(
                     'term_id' => $term->term_id,
                     'name'    => $term->name,
                     'slug'    => $term->slug,
-                    'es_comun' => (bool) $es_comun
+                    'es_comun' => (bool) $es_comun_bool,
+                    'hora_cierre' => $hora_cierre // Pasamos la hora de cierre también, la necesitaremos después
                 );
                 $todas_sedes_data[] = $term_data;
             }
@@ -98,12 +106,13 @@ function mph_admin_enqueue_scripts( $hook ) {
         $todos_rangos_data = array();
         if ( !is_wp_error($todos_rangos_terms) && !empty($todos_rangos_terms) ) {
             foreach ( $todos_rangos_terms as $term ) {
-                $es_comun = get_field( 'rango_edad_comun', 'rango_edad_' . $term->term_id ); // <-- Asegúrate que el nombre ACF sea 'rango_edad_comun'
+                $es_comun_raw = get_term_meta( $term->term_id, 'rango_edad_comun', true ); // Usar get_term_meta
+                $es_comun_bool = !empty($es_comun_raw) && $es_comun_raw === '1';
                 $term_data = array(
                     'term_id' => $term->term_id,
                     'name'    => $term->name,
                     'slug'    => $term->slug,
-                    'es_comun' => (bool) $es_comun
+                    'es_comun' => (bool) $es_comun_bool
                 );
                 $todos_rangos_data[] = $term_data;
             }

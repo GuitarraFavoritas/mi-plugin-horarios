@@ -37,6 +37,7 @@ define( 'MI_PLUGIN_HORARIOS_URL', plugin_dir_url( __FILE__ ) );
  */
 require_once MI_PLUGIN_HORARIOS_PATH . 'includes/post-types.php';
 require_once MI_PLUGIN_HORARIOS_PATH . 'includes/taxonomies.php';
+require_once MI_PLUGIN_HORARIOS_PATH . 'includes/taxonomy-meta-fields.php';
 require_once MI_PLUGIN_HORARIOS_PATH . 'includes/schedule-logic.php';
 require_once MI_PLUGIN_HORARIOS_PATH . 'includes/ajax-handlers.php';
 // Descomenta la siguiente línea si decides usar el archivo helpers.php

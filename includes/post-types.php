@@ -87,7 +87,7 @@ function mph_register_maestro_cpt() {
         // 'editor': Editor de contenido principal (para biografía, notas, etc.). Puedes quitarlo si no lo necesitas.
         // 'thumbnail': Soporte para Imagen Destacada (Foto del Maestro).
         // 'custom-fields': Soporte básico para campos personalizados (aunque usaremos ACF principalmente).
-        'supports'              => array( 'title', 'custom-fields' ),
+        'supports'              => array( 'title' ),
         // 'taxonomies' especifica las taxonomías que se asociarán a este CPT.
         // Las registraremos en 'taxonomies.php', pero las listamos aquí para la asociación.
         'taxonomies'            => array( 'programa', 'sede', 'rango_edad' ),
