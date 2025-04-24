@@ -26,7 +26,7 @@ function mph_register_ajax_actions() {
     add_action( 'wp_ajax_mph_guardar_horario_maestro', 'mph_ajax_guardar_horario_maestro_callback' );
 
     // Aquí podríamos añadir otras acciones AJAX en el futuro (ej. eliminar, filtrar frontend)
-    // add_action( 'wp_ajax_mph_eliminar_horario', 'mph_ajax_eliminar_horario_callback' );
+    add_action( 'wp_ajax_mph_eliminar_horario', 'mph_ajax_eliminar_horario_callback' );
     // add_action( 'wp_ajax_nopriv_mph_filtrar_horarios', 'mph_ajax_filtrar_horarios_callback' ); // Ejemplo no logueado
 }
 add_action( 'init', 'mph_register_ajax_actions' ); // Registrar las acciones al inicio
@@ -244,4 +244,63 @@ function mph_ajax_guardar_horario_maestro_callback() {
 
 } // Fin de mph_ajax_guardar_horario_maestro_callback
 
-?>
+
+/**
+ * Callback para la acción AJAX 'mph_eliminar_horario'.
+ *
+ * Elimina un post CPT 'Horario' específico.
+ */
+function mph_ajax_eliminar_horario_callback() {
+    $log_prefix = "AJAX mph_eliminar_horario:";
+    error_log("$log_prefix Petición AJAX recibida.");
+
+    // --- 1. Obtener y Validar Datos ---
+    $horario_id = isset($_POST['horario_id']) ? intval($_POST['horario_id']) : 0;
+    $nonce = isset($_POST['nonce']) ? sanitize_key($_POST['nonce']) : '';
+
+    if ( empty($horario_id) || empty($nonce) ) {
+        error_log("$log_prefix Error: Faltan horario_id o nonce.");
+        wp_send_json_error( array( 'message' => __('Datos insuficientes para eliminar.', 'mi-plugin-horarios') ), 400 );
+        return;
+    }
+     error_log("$log_prefix Intentando eliminar Horario ID: $horario_id");
+
+    // --- 2. Verificación de Seguridad ---
+    // Verificar Nonce específico para este horario
+    if ( ! wp_verify_nonce( $nonce, 'mph_eliminar_horario_' . $horario_id ) ) {
+        error_log("$log_prefix Error: Falló la verificación del Nonce específico.");
+        wp_send_json_error( array( 'message' => __( 'Error de seguridad (Nonce inválido). Por favor, recarga la página.', 'mi-plugin-horarios' ) ), 403 );
+        return;
+    }
+
+    // Verificar Permisos (usar la misma capacidad que para guardar)
+    if ( ! current_user_can( 'edit_others_posts' ) ) {
+         error_log("$log_prefix Error: Permisos insuficientes.");
+         wp_send_json_error( array( 'message' => __( 'No tienes permisos suficientes para eliminar horarios.', 'mi-plugin-horarios' ) ), 403 );
+         return;
+    }
+
+    // --- 3. Comprobar si el Post Existe y es del Tipo Correcto (Opcional pero recomendado) ---
+    $post_a_borrar = get_post($horario_id);
+    if (!$post_a_borrar || $post_a_borrar->post_type !== 'horario') {
+         error_log("$log_prefix Error: El post ID $horario_id no existe o no es un 'horario'.");
+         wp_send_json_error( array( 'message' => __('El horario a eliminar no es válido.', 'mi-plugin-horarios') ), 404 ); // 404 Not Found
+         return;
+    }
+
+     // --- 4. Ejecutar Borrado ---
+     // El segundo parámetro 'true' fuerza el borrado permanente (sin pasar por la papelera)
+     $delete_result = wp_delete_post( $horario_id, true );
+
+     if ( $delete_result !== false && $delete_result !== null ) {
+         // Éxito (wp_delete_post devuelve el objeto WP_Post borrado en éxito, o false/null/WP_Error en fallo)
+         error_log("$log_prefix Éxito: Horario ID $horario_id eliminado.");
+         wp_send_json_success( array( 'message' => __('Horario eliminado con éxito.', 'mi-plugin-horarios') ) );
+     } else {
+         // Fallo
+         error_log("$log_prefix Error: wp_delete_post falló para el ID $horario_id.");
+         wp_send_json_error( array( 'message' => __('No se pudo eliminar el horario.', 'mi-plugin-horarios') ), 500 );
+     }
+
+     // wp_send_json_* termina la ejecución
+}

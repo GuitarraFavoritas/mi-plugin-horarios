@@ -356,4 +356,69 @@ jQuery(window).on('load', function() {
         else { $errorDiv.hide(); }
     });
 
+    /* Inicia Modificación: Añadir manejador para Eliminar */
+const $tablaContainer = $('#mph-tabla-horarios-container'); // Selector para el contenedor de la tabla
+
+$tablaContainer.on('click', '.mph-accion-eliminar', function(e) {
+    e.preventDefault(); // Prevenir cualquier acción por defecto del botón/enlace
+
+    const $button = $(this);
+    const horarioId = $button.data('horario-id');
+    const nonce = $button.data('nonce');
+    const $fila = $button.closest('tr'); // Encontrar la fila de la tabla a eliminar
+
+    if (!horarioId || !nonce) {
+        console.error('Error: No se encontraron el ID del horario o el Nonce en el botón de eliminar.');
+        alert(mph_admin_obj.i18n.error_general || 'Error inesperado al intentar eliminar.');
+        return;
+    }
+
+    // Pedir confirmación
+    // Usar texto localizado pasado desde PHP
+    const confirmarMsg = mph_admin_obj.i18n.confirmar_eliminacion || '¿Estás seguro de que deseas eliminar este horario?';
+    if (confirm(confirmarMsg)) {
+        console.log(`Intentando eliminar horario ID: ${horarioId}`);
+
+        // Mostrar un feedback visual (ej. deshabilitar botón, añadir spinner a la fila?)
+        $button.prop('disabled', true).css('opacity', 0.5);
+        // Podríamos añadir un pequeño spinner junto al botón si quisiéramos
+
+        // Preparar datos para AJAX
+        const dataToSend = {
+            action: 'mph_eliminar_horario', // Nueva acción AJAX
+            horario_id: horarioId,
+            nonce: nonce // Nonce específico para esta acción/ID
+        };
+
+        // Enviar petición AJAX
+        $.post(mph_admin_obj.ajax_url, dataToSend)
+            .done(function (response) {
+                if (response.success) {
+                    console.log(`Horario ID: ${horarioId} eliminado con éxito.`);
+                    // Eliminar la fila de la tabla con una animación suave
+                    $fila.fadeOut(400, function() {
+                        $(this).remove();
+                        // Opcional: Mostrar un mensaje de éxito temporal
+                        // alert(mph_admin_obj.i18n.horario_eliminado || 'Horario eliminado.');
+                    });
+                } else {
+                    console.error('Error devuelto por el servidor al eliminar:', response.data.message);
+                    alert(mph_admin_obj.i18n.error_general + (response.data.message ? ' (' + response.data.message + ')' : ''));
+                    $button.prop('disabled', false).css('opacity', 1); // Reactivar botón si falla
+                }
+            })
+            .fail(function (jqXHR, textStatus, errorThrown) {
+                console.error("Error AJAX al eliminar:", textStatus, errorThrown, jqXHR.responseText);
+                alert(mph_admin_obj.i18n.error_general || 'Error de comunicación al intentar eliminar.');
+                $button.prop('disabled', false).css('opacity', 1); // Reactivar botón si falla
+            })
+            .always(function() {
+                // Código que se ejecuta siempre (ej. quitar spinner si lo añadimos)
+            });
+
+    } else {
+        console.log('Eliminación cancelada por el usuario.');
+    }
+});
+
 }); // Fin de jQuery(window).on('load', ...)
