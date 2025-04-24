@@ -55,6 +55,7 @@ require_once MI_PLUGIN_HORARIOS_PATH . 'includes/logic/calculator.php';
  */
 if ( is_admin() ) {
     require_once MI_PLUGIN_HORARIOS_PATH . 'admin/meta-boxes.php';
+    require_once MI_PLUGIN_HORARIOS_PATH . 'admin/views/maestro-horarios-table.php';
     require_once MI_PLUGIN_HORARIOS_PATH . 'admin/enqueue.php';
     // Aquí podríamos incluir más archivos específicos del admin si fuera necesario.
 }

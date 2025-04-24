@@ -210,16 +210,21 @@ function mph_ajax_guardar_horario_maestro_callback() {
     // --- 5. Preparar y Enviar Respuesta JSON ---
     if ( $creados_count > 0 && empty($errores_creacion) ) {
         error_log("$log_prefix Éxito: Creados $creados_count bloques.");
-        // Opcional: Generar HTML actualizado de la tabla para devolver al JS
+
+        // Generar HTML actualizado de la tabla para devolver al JS
         $html_tabla = '';
         if ( function_exists( 'mph_get_horarios_table_html' ) ) {
-             // Pasamos el ID del maestro para obtener su tabla actualizada
-            $html_tabla = mph_get_horarios_table_html( $sanitized_data['maestro_id'] );
-             error_log("$log_prefix HTML de tabla generado.");
+             // Asegurarse de que $sanitized_data['maestro_id'] tiene el ID correcto
+            if (!empty($sanitized_data['maestro_id'])) {
+                 $html_tabla = mph_get_horarios_table_html( $sanitized_data['maestro_id'] );
+                 error_log("$log_prefix HTML de tabla generado.");
+             } else {
+                 error_log("$log_prefix Error: No se pudo obtener Maestro ID para generar tabla.");
+             }
         } else {
              error_log("$log_prefix Advertencia: Función mph_get_horarios_table_html no encontrada.");
         }
-
+        
         wp_send_json_success( array(
             'message' => __( 'Horario guardado con éxito.', 'mi-plugin-horarios' ),
             'html_tabla' => $html_tabla // Enviar HTML al JS para actualizar la vista

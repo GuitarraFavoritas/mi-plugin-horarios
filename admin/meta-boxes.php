@@ -49,11 +49,12 @@ function mph_render_horarios_meta_box_content( $post ) {
 
         <div id="mph-tabla-horarios-container">
             <?php
+            // Comprobar si la función existe (por si acaso) y llamarla
             if ( function_exists( 'mph_get_horarios_table_html' ) ) {
-                // echo mph_get_horarios_table_html( $post->ID ); // Se mostrará en Fase 3
-                echo '<p>' . esc_html__( 'La tabla de horarios se cargará aquí.', 'mi-plugin-horarios' ) . '</p>';
+                echo mph_get_horarios_table_html( $post->ID ); // Llamar a la función
             } else {
-                echo '<p>' . esc_html__( 'La tabla de horarios se cargará aquí.', 'mi-plugin-horarios' ) . '</p>';
+                // Mensaje de fallback si la función no se cargó
+                echo '<p style="color:red;">' . esc_html__( 'Error: La función para mostrar la tabla no está disponible.', 'mi-plugin-horarios' ) . '</p>';
             }
             ?>
         </div>
