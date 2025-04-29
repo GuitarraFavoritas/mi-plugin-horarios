@@ -903,16 +903,87 @@ function initTableActions(tableContainerSelector) {
   $tableContainer.on('click', '.mph-accion-editar', function (e) {
     e.preventDefault();
     var $button = jquery__WEBPACK_IMPORTED_MODULE_0___default()(this);
-    var horarioInfo = $button.data('horario-info'); // Obtener el JSON de datos
-    console.log('Botón Editar clickeado. Info:', horarioInfo);
-    alert('Funcionalidad "Editar" aún no implementada en JS.');
-    // TODO:
-    // 1. Parsear horarioInfo.
-    // 2. Llamar a resetModalForm.
-    // 3. Pre-llenar TODOS los campos del modal (generales y específicos) con los datos de horarioInfo.
-    // 4. Mostrar ambas secciones del modal (general y específica).
-    // 5. Abrir el modal.
-    // 6. Añadir el 'horario_id' al campo oculto #mph_horario_id_editando.
+    console.log('Botón Editar clickeado.');
+    try {
+      // 1. Leer y parsear datos (jQuery lo hace automáticamente)
+      var horarioInfo = $button.data('horario-info');
+      console.log('Info Horario Objeto (para Editar):', horarioInfo);
+      if (!horarioInfo || _typeof(horarioInfo) !== 'object') {
+        throw new Error("No se pudo obtener un objeto válido de data-horario-info.");
+      }
+
+      // 2. Obtener referencia al modal
+      var $modal = jquery__WEBPACK_IMPORTED_MODULE_0___default()('#mph-modal-horario');
+      if (!$modal.length) {
+        throw new Error("Modal #mph-modal-horario no encontrado.");
+      }
+
+      // 3. Resetear el formulario
+      console.log("Reseteando modal antes de editar...");
+      (0,_modal_init__WEBPACK_IMPORTED_MODULE_1__.resetModalForm)($modal);
+
+      // 4. Pre-llenar TODOS los campos con horarioInfo
+      console.log("Pre-llenando TODOS los campos para editar...");
+
+      // --- Campos Generales ---
+      $modal.find('#mph_dia_semana').val(horarioInfo.dia || '');
+      console.log("Pre-llenando horas generales con horas asignadas para editar...");
+      $modal.find('#mph_hora_inicio_general').val(horarioInfo.inicio_asig || ''); // Usar inicio_asig
+      $modal.find('#mph_hora_fin_general').val(horarioInfo.fin_asig || ''); // Usar fin_asig
+
+      // Checkboxes admisibles (marcar comunes + específicos de este bloque si los pasamos)
+      // resetModalForm ya marca comunes. Marcar los específicos si los incluimos en horarioInfo.prog_admisibles etc.
+      if (horarioInfo.prog_admisibles && Array.isArray(horarioInfo.prog_admisibles)) {
+        horarioInfo.prog_admisibles.forEach(function (id) {
+          if (id) $modal.find('#programa_' + id).prop('checked', true);
+        });
+      }
+      if (horarioInfo.sede_admisibles && Array.isArray(horarioInfo.sede_admisibles)) {
+        horarioInfo.sede_admisibles.forEach(function (id) {
+          if (id) $modal.find('#sede_' + id).prop('checked', true);
+        });
+      }
+      if (horarioInfo.rango_admisibles && Array.isArray(horarioInfo.rango_admisibles)) {
+        horarioInfo.rango_admisibles.forEach(function (id) {
+          if (id) $modal.find('#rango_edad_' + id).prop('checked', true);
+        }); // Usar slug correcto
+      }
+      console.log("Checkboxes admisibles pre-seleccionados para editar.");
+
+      // --- Campos Específicos ---
+      $modal.find('#mph_hora_inicio_asignada').val(horarioInfo.inicio_asig || '');
+      $modal.find('#mph_hora_fin_asignada').val(horarioInfo.fin_asig || '');
+      $modal.find('#mph_vacantes').val(horarioInfo.vacantes !== undefined ? horarioInfo.vacantes : 1); // Usar valor o default
+      $modal.find('#mph_buffer_minutos_antes').val(horarioInfo.buffer_antes !== undefined ? horarioInfo.buffer_antes : 60);
+      $modal.find('#mph_buffer_minutos_despues').val(horarioInfo.buffer_despues !== undefined ? horarioInfo.buffer_despues : 60);
+      // Determinar si los buffers estaban linkeados (si son iguales)
+      $modal.find('#mph_buffer_linkeado').prop('checked', horarioInfo.buffer_antes === horarioInfo.buffer_despues);
+
+      // Poblar selects y seleccionar el valor guardado
+      (0,_modal_form_interaction__WEBPACK_IMPORTED_MODULE_2__.poblarSelectsAsignacion)($modal); // Poblar con opciones basadas en checkboxes marcados
+      $modal.find('#mph_programa_asignado').val(horarioInfo.prog_asig || ''); // Seleccionar valor
+      $modal.find('#mph_sede_asignada').val(horarioInfo.sede_asig || ''); // Seleccionar valor
+      $modal.find('#mph_rango_edad_asignado').val(horarioInfo.rango_asig || ''); // Seleccionar valor
+      console.log("Campos específicos pre-llenados.");
+
+      // 5. Mostrar sección de asignación específica (porque estamos editando una)
+      console.log("Mostrando sección de asignación para editar...");
+      var $seccionAsignacion = $modal.find('.mph-asignacion-especifica');
+      if ($seccionAsignacion.length) {
+        $seccionAsignacion.show();
+      }
+
+      // 6. Establecer ID Original
+      $modal.find('#mph_horario_id_editando').val(horarioInfo.horario_id || '');
+      console.log("ID de horario (" + (horarioInfo.horario_id || 'N/A') + ") establecido para edición.");
+
+      // 7. Abrir el modal
+      console.log("Abriendo modal para editar...");
+      (0,_modal_init__WEBPACK_IMPORTED_MODULE_1__.openModal)($modal);
+    } catch (e) {
+      console.error("Error al procesar horarioInfo o pre-llenar modal para Editar:", e);
+      alert("Error al preparar el formulario de edición.");
+    }
   });
   console.log("Acciones de tabla para \"".concat(tableContainerSelector, "\" inicializadas."));
 }

@@ -142,27 +142,34 @@ function mph_get_horarios_table_html( $maestro_id ) {
                 }
 
                  // Botón Editar (para Asignado, Lleno)
-                 if (in_array($estado, ['Asignado', 'Lleno'])) {
-                      // Pasar todos los datos guardados para pre-llenar el modal de edición
-                      $data_editar = htmlspecialchars(json_encode(array(
-                         'horario_id' => $horario_id,
-                         'dia' => $num_dia,
-                         'inicio_gen' => '', // ¿Cómo obtenemos el general original? Necesitaríamos guardarlo o recalcularlo. Dejamos vacío por ahora.
-                         'fin_gen' => '',   // Idem.
-                         'prog_admisibles' => isset($meta['mph_programas_admisibles'][0]) ? explode(',', $meta['mph_programas_admisibles'][0]) : array(), // Pasar admisibles por si acaso
-                         'sede_admisibles' => isset($meta['mph_sedes_admisibles'][0]) ? explode(',', $meta['mph_sedes_admisibles'][0]) : array(),
-                         'rango_admisibles' => isset($meta['mph_rangos_admisibles'][0]) ? explode(',', $meta['mph_rangos_admisibles'][0]) : array(),
-                         'inicio_asig' => $hora_inicio,
-                         'fin_asig' => $hora_fin,
-                         'prog_asig' => isset($meta['mph_programa_asignado'][0]) ? intval($meta['mph_programa_asignado'][0]) : 0,
-                         'sede_asig' => isset($meta['mph_sede_asignada'][0]) ? intval($meta['mph_sede_asignada'][0]) : 0,
-                         'rango_asig' => isset($meta['mph_rango_de_edad_asignado'][0]) ? intval($meta['mph_rango_de_edad_asignado'][0]) : 0,
-                         'vacantes' => $vacantes,
-                         'buffer_antes' => isset($meta['mph_buffer_antes'][0]) ? intval($meta['mph_buffer_antes'][0]) : 0,
-                         'buffer_despues' => isset($meta['mph_buffer_despues'][0]) ? intval($meta['mph_buffer_despues'][0]) : 0,
-                     )), ENT_QUOTES, 'UTF-8');
-                     $acciones_col .= ' | <button type="button" class="button button-link mph-accion-horario mph-accion-editar" data-horario-info="' . $data_editar . '">' . esc_html__('Editar', 'mi-plugin-horarios') . '</button>';
-                }
+                     if (in_array($estado, ['Asignado', 'Lleno'])) {
+                          // Pasar todos los datos guardados para pre-llenar el modal de edición
+                          /* Inicia Modificación: Incluir IDs admisibles en data_editar */
+                          $prog_admisibles_ids = isset($meta['mph_programas_admisibles'][0]) ? explode(',', $meta['mph_programas_admisibles'][0]) : array();
+                          $sede_admisibles_ids = isset($meta['mph_sedes_admisibles'][0]) ? explode(',', $meta['mph_sedes_admisibles'][0]) : array();
+                          $rango_admisibles_ids = isset($meta['mph_rangos_admisibles'][0]) ? explode(',', $meta['mph_rangos_admisibles'][0]) : array();
+
+                          $data_editar = array(
+                             'horario_id' => $horario_id,
+                             'dia' => $num_dia,
+                             // 'inicio_gen' => '', // Seguimos sin tenerlas fácilmente
+                             // 'fin_gen' => '',
+                             'prog_admisibles' => array_map('intval', $prog_admisibles_ids), // Pasar IDs admisibles
+                             'sede_admisibles' => array_map('intval', $sede_admisibles_ids), // Pasar IDs admisibles
+                             'rango_admisibles' => array_map('intval', $rango_admisibles_ids), // Pasar IDs admisibles (OJO slug tax)
+                             'inicio_asig' => $hora_inicio,
+                             'fin_asig' => $hora_fin,
+                             'prog_asig' => isset($meta['mph_programa_asignado'][0]) ? intval($meta['mph_programa_asignado'][0]) : 0,
+                             'sede_asig' => isset($meta['mph_sede_asignada'][0]) ? intval($meta['mph_sede_asignada'][0]) : 0,
+                             'rango_asig' => isset($meta['mph_rango_de_edad_asignado'][0]) ? intval($meta['mph_rango_de_edad_asignado'][0]) : 0, // OJO nombre meta
+                             'vacantes' => $vacantes,
+                             'buffer_antes' => isset($meta['mph_buffer_antes'][0]) ? intval($meta['mph_buffer_antes'][0]) : 0,
+                             'buffer_despues' => isset($meta['mph_buffer_despues'][0]) ? intval($meta['mph_buffer_despues'][0]) : 0,
+                         );
+                          /* Finaliza Modificación */
+                         $data_editar_json = htmlspecialchars(json_encode($data_editar), ENT_QUOTES, 'UTF-8');
+                         $acciones_col .= ' | <button type="button" class="button button-link mph-accion-horario mph-accion-editar" data-horario-info="' . $data_editar_json . '">' . esc_html__('Editar', 'mi-plugin-horarios') . '</button>';
+                    }
 
 
                 // Construir la fila de la tabla
