@@ -31,8 +31,7 @@ add_action( 'add_meta_boxes_maestro', 'mph_add_horarios_meta_box' );
 /**
  * Renderiza el contenido HTML del Meta Box 'Gestión de Horarios'.
  */
-function mph_render_horarios_meta_box_content( $post ) {
-    wp_nonce_field( 'mph_gestionar_horarios_nonce', 'mph_horarios_nonce' );
+function mph_render_horarios_meta_box_content( $post ) {    
     ?>
     <div class="mph-gestion-horarios-wrapper">
 
@@ -73,6 +72,8 @@ function mph_render_horario_modal_html( $post ) {
     ?>
     <div id="mph-modal-horario" title="<?php esc_attr_e( 'Añadir/Editar Disponibilidad', 'mi-plugin-horarios' ); ?>" style="display: none;">
         <form id="mph-form-horario"> <?php // <-- Formulario AQUI ?>
+
+        <?php wp_nonce_field( 'mph_guardar_ajax', 'mph_nonce_guardar' ); // Acción más simple, nombre campo simple ?>
 
             <input type="hidden" id="mph_horario_id_editando" name="horario_id" value="">
             <input type="hidden" id="mph_maestro_id" name="maestro_id" value="<?php echo esc_attr( $post->ID ); ?>">
@@ -185,7 +186,7 @@ function mph_render_horario_modal_html( $post ) {
                  </fieldset>
             </div>
             <div class="mph-modal-acciones" style="margin-top: 20px; padding-top: 15px; border-top: 1px solid #ccc;">
-                <button type="submit" id="mph-guardar-horario" class="button button-primary">
+                <button type="button" id="mph-guardar-horario" class="button button-primary">
                     <?php esc_html_e( 'Guardar Disponibilidad/Asignación', 'mi-plugin-horarios' ); ?>
                 </button>
                 <button type="button" id="mph-cancelar-modal" class="button">

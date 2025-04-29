@@ -45,8 +45,12 @@ function mph_ajax_guardar_horario_maestro_callback() {
 
     // --- 1. Verificación de Seguridad ---
     // Verificar Nonce (Enviado desde JS como 'nonce')
-    if ( ! isset( $_POST['nonce'] ) || ! wp_verify_nonce( sanitize_key($_POST['nonce']), 'mph_gestionar_horarios_nonce' ) ) {
-        error_log("$log_prefix Error: Falló la verificación del Nonce.");
+    $nonce_action = 'mph_guardar_ajax'; // Acción simple usada en wp_nonce_field
+    $nonce_name = 'mph_nonce_guardar'; // Nombre simple del campo en $_POST
+
+    // Verificar que el campo nonce fue enviado y es válido
+    if ( ! isset( $_POST[$nonce_name] ) || ! wp_verify_nonce( sanitize_key($_POST[$nonce_name]), $nonce_action ) ) {
+        error_log("$log_prefix Error: Falló la verificación del Nonce del formulario (Acción: $nonce_action). Nonce recibido: " . sanitize_key($_POST[$nonce_name] ?? 'No recibido'));
         wp_send_json_error( array( 'message' => __( 'Error de seguridad (Nonce inválido). Por favor, recarga la página e inténtalo de nuevo.', 'mi-plugin-horarios' ) ), 403 ); // 403 Forbidden
         return; // Salir
     }
