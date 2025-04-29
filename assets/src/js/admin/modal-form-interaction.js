@@ -24,7 +24,7 @@ const $bufferLinkeado = $('#mph_buffer_linkeado');
  * Puebla los selects de la sección de asignación basándose
  * en los checkboxes seleccionados en la sección general.
  */
-function poblarSelectsAsignacion() {
+export function poblarSelectsAsignacion() {
     console.log("Poblando selects de asignación..."); // Log
 
     if (typeof window.mph_admin_obj === 'undefined' || !mph_admin_obj.todos_programas) {

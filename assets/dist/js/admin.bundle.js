@@ -147,7 +147,8 @@ function initAjaxSubmit($modal) {
 
 __webpack_require__.r(__webpack_exports__);
 /* harmony export */ __webpack_require__.d(__webpack_exports__, {
-/* harmony export */   initFormInteractions: () => (/* binding */ initFormInteractions)
+/* harmony export */   initFormInteractions: () => (/* binding */ initFormInteractions),
+/* harmony export */   poblarSelectsAsignacion: () => (/* binding */ poblarSelectsAsignacion)
 /* harmony export */ });
 /* harmony import */ var jquery__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(/*! jquery */ "jquery");
 /* harmony import */ var jquery__WEBPACK_IMPORTED_MODULE_0___default = /*#__PURE__*/__webpack_require__.n(jquery__WEBPACK_IMPORTED_MODULE_0__);
@@ -721,9 +722,16 @@ __webpack_require__.r(__webpack_exports__);
 /* harmony export */ });
 /* harmony import */ var jquery__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(/*! jquery */ "jquery");
 /* harmony import */ var jquery__WEBPACK_IMPORTED_MODULE_0___default = /*#__PURE__*/__webpack_require__.n(jquery__WEBPACK_IMPORTED_MODULE_0__);
+/* harmony import */ var _modal_init__WEBPACK_IMPORTED_MODULE_1__ = __webpack_require__(/*! ./modal-init */ "./assets/src/js/admin/modal-init.js");
+/* harmony import */ var _modal_form_interaction__WEBPACK_IMPORTED_MODULE_2__ = __webpack_require__(/*! ./modal-form-interaction */ "./assets/src/js/admin/modal-form-interaction.js");
+function _typeof(o) { "@babel/helpers - typeof"; return _typeof = "function" == typeof Symbol && "symbol" == typeof Symbol.iterator ? function (o) { return typeof o; } : function (o) { return o && "function" == typeof Symbol && o.constructor === Symbol && o !== Symbol.prototype ? "symbol" : typeof o; }, _typeof(o); }
 // assets/src/js/admin/table-actions.js
 
-// Importar funciones para interactuar con el modal si es necesario para Editar/Asignar
+
+
+// Podríamos necesitar una función específica para pre-llenar el formulario
+// import { prefillModalForAssignment } from './modal-helpers'; // (La crearemos si es necesario)
+
 // import { openModal, resetModalForm, /* otras funciones como prellenarFormulario */ } from './modal-init';
 
 /**
@@ -795,16 +803,100 @@ function initTableActions(tableContainerSelector) {
   $tableContainer.on('click', '.mph-accion-asignar', function (e) {
     e.preventDefault();
     var $button = jquery__WEBPACK_IMPORTED_MODULE_0___default()(this);
-    var horarioInfo = $button.data('horario-info'); // Obtener el JSON de datos
-    console.log('Botón Asignar clickeado. Info:', horarioInfo);
-    alert('Funcionalidad "Asignar" aún no implementada en JS.');
-    // TODO:
-    // 1. Parsear horarioInfo (es un string JSON).
-    // 2. Llamar a resetModalForm (importada o global).
-    // 3. Pre-llenar el modal con los datos de horarioInfo (horas generales, admisibles).
-    // 4. Mostrar directamente la sección de asignación específica.
-    // 5. Abrir el modal (llamar a openModal importada o global).
-    // 6. Añadir el 'horario_id' al campo oculto #mph_horario_id_editando para que el backend sepa qué reemplazar/dividir.
+    var horarioInfoString = $button.data('horario-info');
+    console.log('Botón Asignar clickeado.');
+    if (!horarioInfoString) {
+      console.error("Error: No se encontró data-horario-info en el botón Asignar.");
+      alert("Error al obtener información del horario.");
+      return;
+    }
+    try {
+      // 1. Leer el atributo data-* usando jQuery. jQuery intenta parsear automáticamente.
+      var horarioInfo = $button.data('horario-info');
+      console.log('Info Horario Objeto (de .data()):', horarioInfo);
+
+      // 2. Verificar si obtuvimos un objeto válido
+      if (!horarioInfo || _typeof(horarioInfo) !== 'object') {
+        throw new Error("No se pudo obtener un objeto válido de data-horario-info.");
+      }
+
+      // 3. Obtener referencia al modal (necesario para funciones de modal)
+      var $modal = jquery__WEBPACK_IMPORTED_MODULE_0___default()('#mph-modal-horario');
+      if (!$modal.length) {
+        console.error("Error: Modal #mph-modal-horario no encontrado.");
+        return;
+      }
+
+      // 4. Resetear el formulario completamente
+      console.log("Reseteando modal antes de asignar...");
+      (0,_modal_init__WEBPACK_IMPORTED_MODULE_1__.resetModalForm)($modal); // Llamar a la función importada
+
+      // 5. Pre-llenar campos de Disponibilidad General
+      console.log("Pre-llenando campos generales...");
+      $modal.find('#mph_dia_semana').val(horarioInfo.dia || '');
+      $modal.find('#mph_hora_inicio_general').val(horarioInfo.inicio || '');
+      $modal.find('#mph_hora_fin_general').val(horarioInfo.fin || '');
+
+      // 6. Pre-seleccionar checkboxes admisibles
+      // (resetModalForm ya debería marcar los comunes, aquí marcamos los específicos de este bloque)
+      if (horarioInfo.programas_admisibles && Array.isArray(horarioInfo.programas_admisibles)) {
+        horarioInfo.programas_admisibles.forEach(function (id) {
+          if (id) $modal.find('#programa_' + id).prop('checked', true);
+        });
+      }
+      if (horarioInfo.sedes_admisibles && Array.isArray(horarioInfo.sedes_admisibles)) {
+        horarioInfo.sedes_admisibles.forEach(function (id) {
+          if (id) $modal.find('#sede_' + id).prop('checked', true);
+        });
+      }
+      if (horarioInfo.rangos_admisibles && Array.isArray(horarioInfo.rangos_admisibles)) {
+        // Ojo con el slug aquí si era diferente (rango_edad vs rango_de_edad)
+        horarioInfo.rangos_admisibles.forEach(function (id) {
+          if (id) $modal.find('#rango_edad_' + id).prop('checked', true); // Usar slug correcto
+        });
+      }
+      console.log("Checkboxes admisibles pre-seleccionados.");
+
+      // 7. Mostrar sección de asignación específica y poblar sus selects
+      console.log("Mostrando sección de asignación...");
+      var $seccionAsignacion = $modal.find('.mph-asignacion-especifica');
+      if ($seccionAsignacion.length) {
+        // Llamar a poblarSelects (necesitaríamos importarla o rehacer la lógica aquí)
+        // Por ahora, asumimos que existe una función global o la importamos si es necesario.
+        // Necesita ejecutarse DESPUÉS de marcar los checkboxes.
+        if (typeof _modal_form_interaction__WEBPACK_IMPORTED_MODULE_2__.poblarSelectsAsignacion === "function") {
+          // ¿Está disponible globalmente? (No ideal)
+          (0,_modal_form_interaction__WEBPACK_IMPORTED_MODULE_2__.poblarSelectsAsignacion)($modal); // Necesita $modal si busca elementos internos
+          console.log("Selects de asignación poblados.");
+        } else {
+          console.warn("Función poblarSelectsAsignacion no encontrada/importada en table-actions.js");
+          // Podríamos llamar al trigger change de los checkboxes para que se actualice si el listener está activo
+          $modal.find('#mph-programas-admisibles-container input:checked').first().trigger('change');
+        }
+
+        // Pre-llenar horas de asignación con las generales (que acabamos de poner)
+        $modal.find('#mph_hora_inicio_asignada').val(horarioInfo.inicio || '');
+        $modal.find('#mph_hora_fin_asignada').val(horarioInfo.fin || '');
+        console.log("Horas de asignación pre-llenadas.");
+
+        // Mostrar la sección (sin animación para rapidez)
+        $seccionAsignacion.show();
+        console.log("Sección de asignación mostrada.");
+      } else {
+        console.error("Error: Sección de asignación no encontrada en el modal.");
+      }
+
+      // 8. Añadir el ID del horario original que se va a reemplazar/dividir
+      $modal.find('#mph_horario_id_editando').val(horarioInfo.horario_id || '');
+      console.log("ID de horario original (" + horarioInfo.horario_id + ") establecido para edición.");
+
+      // 9. Abrir el modal
+      console.log("Abriendo modal para asignar...");
+      (0,_modal_init__WEBPACK_IMPORTED_MODULE_1__.openModal)($modal); // Llamar a la función importada
+    } catch (e) {
+      console.error("Error al parsear horarioInfo o pre-llenar modal para Asignar:", e);
+      alert("Error al preparar el formulario de asignación.");
+    }
   });
 
   // --- Acción Editar (Placeholder) ---
