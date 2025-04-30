@@ -144,7 +144,16 @@ function mph_get_horarios_table_html( $maestro_id ) {
                  // Botón Editar (para Asignado, Lleno)
                      if (in_array($estado, ['Asignado', 'Lleno'])) {
                           // Pasar todos los datos guardados para pre-llenar el modal de edición
-                          /* Inicia Modificación: Incluir IDs admisibles en data_editar */
+
+                        /* Botón Vaciar */
+
+                        // Necesitamos el ID del horario y un nonce específico
+                        $nonce_vaciar = wp_create_nonce('mph_vaciar_horario_' . $horario_id);
+                        $acciones_col .= ' | <button type="button" class="button button-link button-link-delete mph-accion-horario mph-accion-vaciar" data-horario-id="' . esc_attr($horario_id) . '" data-nonce="' . esc_attr($nonce_vaciar) . '">' . esc_html__('Vaciar', 'mi-plugin-horarios') . '</button>';
+
+                        /* Finaliza Botón Vaciar */
+
+
                           $prog_admisibles_ids = isset($meta['mph_programas_admisibles'][0]) ? explode(',', $meta['mph_programas_admisibles'][0]) : array();
                           $sede_admisibles_ids = isset($meta['mph_sedes_admisibles'][0]) ? explode(',', $meta['mph_sedes_admisibles'][0]) : array();
                           $rango_admisibles_ids = isset($meta['mph_rangos_admisibles'][0]) ? explode(',', $meta['mph_rangos_admisibles'][0]) : array();
@@ -166,7 +175,6 @@ function mph_get_horarios_table_html( $maestro_id ) {
                              'buffer_antes' => isset($meta['mph_buffer_antes'][0]) ? intval($meta['mph_buffer_antes'][0]) : 0,
                              'buffer_despues' => isset($meta['mph_buffer_despues'][0]) ? intval($meta['mph_buffer_despues'][0]) : 0,
                          );
-                          /* Finaliza Modificación */
                          $data_editar_json = htmlspecialchars(json_encode($data_editar), ENT_QUOTES, 'UTF-8');
                          $acciones_col .= ' | <button type="button" class="button button-link mph-accion-horario mph-accion-editar" data-horario-info="' . $data_editar_json . '">' . esc_html__('Editar', 'mi-plugin-horarios') . '</button>';
                     }

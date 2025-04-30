@@ -161,7 +161,8 @@ function mph_calcular_bloques_horario( $maestro_id, $data ) {
              $dt_inicio_buffer_antes->format('H:i'),
              $dt_inicio_asignado->format('H:i'),
              $estado_buffer_antes,
-             array($programa_asignado), array($sede_asignada), array($rango_asignado), // Usar asignados como admisibles
+             /* array($programa_asignado), array($sede_asignada), array($rango_asignado), // Usar asignados como admisibles */
+             $programas_admisibles, $sedes_admisibles, $rangos_admisibles, // <-- Usar generales
              0, $programa_asignado, $sede_asignada, $rango_asignado, $buffer_antes_min, $buffer_despues_min // Guardar ref a asignación original
            );
         }
@@ -175,7 +176,8 @@ function mph_calcular_bloques_horario( $maestro_id, $data ) {
          $dt_inicio_asignado->format('H:i'),
          $dt_fin_asignado->format('H:i'),
          $estado_asignado,
-         array($programa_asignado), array($sede_asignada), array($rango_asignado), // Admisibles = Asignado
+         /* array($programa_asignado), array($sede_asignada), array($rango_asignado), // Admisibles = Asignado*/
+         $programas_admisibles, $sedes_admisibles, $rangos_admisibles, // <-- Usar generales
          $vacantes,
          $programa_asignado, $sede_asignada, $rango_asignado,
          $buffer_antes_min, $buffer_despues_min
@@ -201,7 +203,8 @@ function mph_calcular_bloques_horario( $maestro_id, $data ) {
             $dt_fin_asignado->format('H:i'),
             $dt_fin_buffer_despues->format('H:i'),
             $estado_buffer_despues,
-            array($programa_asignado), array($sede_asignada), array($rango_asignado),
+            /*array($programa_asignado), array($sede_asignada), array($rango_asignado),*/
+            $programas_admisibles, $sedes_admisibles, $rangos_admisibles, // <-- Usar generales
             0, $programa_asignado, $sede_asignada, $rango_asignado, $buffer_antes_min, $buffer_despues_min
           );
        }

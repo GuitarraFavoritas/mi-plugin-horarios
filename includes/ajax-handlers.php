@@ -22,12 +22,9 @@ if ( ! defined( 'ABSPATH' ) ) {
  * 'wp_ajax_nopriv_{action}' para usuarios no logueados (si fuera necesario).
  */
 function mph_register_ajax_actions() {
-    // Acción para guardar/actualizar horario desde el modal del maestro
     add_action( 'wp_ajax_mph_guardar_horario_maestro', 'mph_ajax_guardar_horario_maestro_callback' );
-
-    // Aquí podríamos añadir otras acciones AJAX en el futuro (ej. eliminar, filtrar frontend)
     add_action( 'wp_ajax_mph_eliminar_horario', 'mph_ajax_eliminar_horario_callback' );
-    // add_action( 'wp_ajax_nopriv_mph_filtrar_horarios', 'mph_ajax_filtrar_horarios_callback' ); // Ejemplo no logueado
+    add_action( 'wp_ajax_mph_vaciar_horario', 'mph_ajax_vaciar_horario_callback' );
 }
 add_action( 'init', 'mph_register_ajax_actions' ); // Registrar las acciones al inicio
 
@@ -307,4 +304,100 @@ function mph_ajax_eliminar_horario_callback() {
      }
 
      // wp_send_json_* termina la ejecución
+}
+
+/**
+ * Callback para la acción AJAX 'mph_vaciar_horario'.
+ *
+ * Convierte un post 'Horario' asignado/lleno en un estado 'Vacío',
+ * manteniendo sus horas y admisibles originales.
+ */
+function mph_ajax_vaciar_horario_callback() {
+    $log_prefix = "AJAX mph_vaciar_horario:";
+    error_log("$log_prefix Petición AJAX recibida.");
+
+    // 1. Obtener y Validar Datos + Nonce
+    $horario_id = isset($_POST['horario_id']) ? intval($_POST['horario_id']) : 0;
+    $nonce = isset($_POST['nonce']) ? sanitize_key($_POST['nonce']) : '';
+    if ( empty($horario_id) || empty($nonce) ) { /* ... error datos insuficientes ... */ return; }
+    error_log("$log_prefix Intentando vaciar Horario ID: $horario_id");
+
+    // 2. Verificar Nonce específico para vaciar este ID
+    if ( ! wp_verify_nonce( $nonce, 'mph_vaciar_horario_' . $horario_id ) ) {
+         error_log("$log_prefix Error: Falló Nonce específico para vaciar.");
+         wp_send_json_error( array( 'message' => __('Error de seguridad (Vaciar).', 'mi-plugin-horarios') ), 403 );
+         return;
+    }
+     error_log("$log_prefix Nonce para vaciar verificado.");
+
+    // 3. Verificar Permisos
+    if ( ! current_user_can( 'edit_others_posts' ) ) { /* ... error permisos ... */ return; }
+
+    // 4. Obtener Post y Metadatos Actuales
+    $post_a_vaciar = get_post($horario_id);
+    if (!$post_a_vaciar || $post_a_vaciar->post_type !== 'horario') { /* ... error post inválido ... */ return; }
+    $meta = get_post_meta($horario_id); // Obtener todos los meta
+
+     // Extraer datos necesarios
+     $maestro_id = isset($meta['maestro_id'][0]) ? intval($meta['maestro_id'][0]) : 0;
+     $dia_semana = isset($meta['mph_dia_semana'][0]) ? intval($meta['mph_dia_semana'][0]) : 0;
+     $hora_inicio = isset($meta['mph_hora_inicio'][0]) ? $meta['mph_hora_inicio'][0] : '';
+     $hora_fin = isset($meta['mph_hora_fin'][0]) ? $meta['mph_hora_fin'][0] : '';
+     // ¡IMPORTANTE! Necesitamos los admisibles ORIGINALES. Asumimos que se guardaron correctamente antes.
+     $programas_admisibles = isset($meta['mph_programas_admisibles'][0]) ? $meta['mph_programas_admisibles'][0] : '';
+     $sedes_admisibles = isset($meta['mph_sedes_admisibles'][0]) ? $meta['mph_sedes_admisibles'][0] : '';
+     $rangos_admisibles = isset($meta['mph_rangos_admisibles'][0]) ? $meta['mph_rangos_admisibles'][0] : '';
+
+     if (empty($maestro_id) || empty($dia_semana) || empty($hora_inicio) || empty($hora_fin)) {
+          error_log("$log_prefix Error: No se pudieron obtener datos esenciales del post $horario_id para vaciar.");
+          wp_send_json_error( array( 'message' => __('Error al leer datos del horario original.', 'mi-plugin-horarios') ), 500 );
+          return;
+     }
+
+    // 5. Preparar Datos para Actualizar a 'Vacío'
+    $nuevo_estado = 'Vacío';
+    $nuevo_titulo = sprintf("Maestro %d - Día %d - %s-%s - %s", $maestro_id, $dia_semana, $hora_inicio, $hora_fin, $nuevo_estado);
+
+    $update_post_args = array(
+        'ID'         => $horario_id,
+        'post_title' => $nuevo_titulo,
+        'meta_input' => array(
+            'mph_estado'                 => $nuevo_estado,
+            // Mantener maestro, día, horas, admisibles
+            'maestro_id'                 => $maestro_id,
+            'mph_dia_semana'             => $dia_semana,
+            'mph_hora_inicio'            => $hora_inicio,
+            'mph_hora_fin'               => $hora_fin,
+            'mph_programas_admisibles'   => $programas_admisibles,
+            'mph_sedes_admisibles'       => $sedes_admisibles,
+            'mph_rangos_admisibles'      => $rangos_admisibles,
+            // Resetear campos de asignación
+            'mph_vacantes'               => 0,
+            'mph_programa_asignado'      => 0,
+            'mph_sede_asignada'          => 0,
+            'mph_rango_de_edad_asignado' => 0,
+            'mph_buffer_antes'           => 0,
+            'mph_buffer_despues'         => 0,
+        ),
+    );
+
+     // 6. Actualizar el Post
+     $update_result = wp_update_post( $update_post_args, true ); // true = devolver WP_Error
+
+     // 7. Enviar Respuesta
+     if ( is_wp_error( $update_result ) ) {
+         error_log("$log_prefix Error al actualizar post $horario_id a Vacío: " . $update_result->get_error_message());
+         wp_send_json_error( array( 'message' => __('Error al vaciar el horario.', 'mi-plugin-horarios') ), 500 );
+     } else {
+         error_log("$log_prefix Éxito: Horario ID $horario_id vaciado.");
+         // Devolver tabla actualizada
+         $html_tabla = '';
+         if ( $maestro_id && function_exists( 'mph_get_horarios_table_html' ) ) {
+             $html_tabla = mph_get_horarios_table_html( $maestro_id );
+         }
+         wp_send_json_success( array(
+             'message' => __('Horario vaciado con éxito.', 'mi-plugin-horarios'),
+             'html_tabla' => $html_tabla
+         ));
+     }
 }

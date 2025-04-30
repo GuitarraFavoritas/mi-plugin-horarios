@@ -77,7 +77,7 @@ export function initTableActions(tableContainerSelector) {
         }
     }); // Fin click .mph-accion-eliminar
 
-    // --- Acción Asignar (Placeholder) ---
+    // --- Acción Asignar ---
     $tableContainer.on('click', '.mph-accion-asignar', function(e) {
          e.preventDefault();
          const $button = $(this);
@@ -184,7 +184,7 @@ export function initTableActions(tableContainerSelector) {
          }
     });
 
-     // --- Acción Editar (Placeholder) ---
+     // --- Acción Editar ---
      $tableContainer.on('click', '.mph-accion-editar', function(e) {
         e.preventDefault();
         const $button = $(this);
@@ -265,6 +265,50 @@ export function initTableActions(tableContainerSelector) {
             console.error("Error al procesar horarioInfo o pre-llenar modal para Editar:", e);
             alert("Error al preparar el formulario de edición.");
         }
+    });
+    
+    // --- Acción Vaciar */
+    $tableContainer.on('click', '.mph-accion-vaciar', function(e) {
+         e.preventDefault();
+         const $button = $(this);
+         const horarioId = $button.data('horario-id');
+         const nonce = $button.data('nonce');
+         const $fila = $button.closest('tr'); // Fila para feedback visual
+
+         if (!horarioId || !nonce) { /* ... error ... */ return; }
+         if (typeof window.mph_admin_obj === 'undefined' || !window.mph_admin_obj.ajax_url || !window.mph_admin_obj.i18n) { /* ... error ... */ return; }
+         const ajax_url = mph_admin_obj.ajax_url;
+         const i18n = mph_admin_obj.i18n;
+
+         const confirmarMsg = i18n.confirmar_vaciado || '¿Estás seguro? Esto convertirá el horario asignado en un bloque vacío.';
+         if (confirm(confirmarMsg)) {
+             console.log(`Intentando vaciar horario ID: ${horarioId}`);
+             $button.prop('disabled', true).css('opacity', 0.5);
+
+             const dataToSend = {
+                 action: 'mph_vaciar_horario', // NUEVA ACCIÓN PHP
+                 horario_id: horarioId,
+                 nonce: nonce // Nonce específico para vaciar
+             };
+
+             $.post(ajax_url, dataToSend)
+                 .done(function (response) {
+                     if (response.success) {
+                         console.log(`Horario ID: ${horarioId} vaciado con éxito.`);
+                         // Actualizar la tabla completa para reflejar el cambio
+                         if (response.data && response.data.html_tabla && $tableContainer.length) {
+                             console.log("Actualizando tabla de horarios después de vaciar...");
+                             $tableContainer.html(response.data.html_tabla);
+                         } else {
+                             console.warn("Respuesta exitosa pero no se encontró HTML de tabla para actualizar.");
+                             // Quizás solo actualizar la fila visualmente? Más complejo.
+                             $button.prop('disabled', false).css('opacity', 1); // Reactivar si no hay update
+                         }
+                         // alert(i18n.horario_vaciado || 'Horario vaciado.'); // Opcional
+                     } else { /* ... manejo error servidor ... */ $button.prop('disabled', false).css('opacity', 1); }
+                 })
+                 .fail(function (jqXHR, textStatus, errorThrown) { /* ... manejo error AJAX ... */ $button.prop('disabled', false).css('opacity', 1); });
+         } else { console.log('Vaciado cancelado.'); }
     });
 
     console.log(`Acciones de tabla para "${tableContainerSelector}" inicializadas.`);

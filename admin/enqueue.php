@@ -103,6 +103,8 @@ function mph_admin_enqueue_scripts( $hook ) {
                 'error_buffer_antes_invalido' => __('El tiempo de buffer Antes debe ser un número positivo.', 'mi-plugin-horarios'),
                 'error_buffer_despues_invalido' => __('El tiempo de buffer Después debe ser un número positivo.', 'mi-plugin-horarios'),
                 'error_seguridad' => __('Error de seguridad. Intente recargar la página.', 'mi-plugin-horarios'),
+                'confirmar_vaciado' => __('¿Estás seguro? Esto convertirá el horario asignado en un bloque vacío.', 'mi-plugin-horarios'),
+                'horario_vaciado' => __('Horario vaciado con éxito.', 'mi-plugin-horarios'),
             ),
         );
         error_log("mph_admin_enqueue_scripts: Datos a localizar (SIN NONCE): " . print_r($data_to_localize, true));
