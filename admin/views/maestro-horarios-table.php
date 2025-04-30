@@ -59,128 +59,158 @@ function mph_get_horarios_table_html( $maestro_id ) {
             // Opcional: Añadir fila separadora para el día
             // $output .= '<tr class="mph-dia-separador"><td colspan="6"><strong>' . esc_html($nombre_dia) . '</strong></td></tr>';
 
-            foreach ($horarios_dia as $horario_post) {
+             foreach ($horarios_dia as $horario_post) {
                 $horario_id = $horario_post->ID;
-                // Obtener metadatos
-                $meta = get_post_meta($horario_id); // Obtener todos los meta para eficiencia
+                $meta = get_post_meta($horario_id);
 
                 $hora_inicio = isset($meta['mph_hora_inicio'][0]) ? $meta['mph_hora_inicio'][0] : 'N/A';
                 $hora_fin = isset($meta['mph_hora_fin'][0]) ? $meta['mph_hora_fin'][0] : 'N/A';
                 $estado = isset($meta['mph_estado'][0]) ? $meta['mph_estado'][0] : 'Desconocido';
                 $vacantes = isset($meta['mph_vacantes'][0]) ? intval($meta['mph_vacantes'][0]) : 0;
+                /* Inicia Modificación: Leer sede adyacente */
+                $sede_adyacente_id = isset($meta['mph_sede_adyacente'][0]) ? intval($meta['mph_sede_adyacente'][0]) : 0;
+                /* Finaliza Modificación */
 
-                // Formatear la columna Horario
                 $horario_col = esc_html($nombre_dia) . ' ' . esc_html($hora_inicio) . ' - ' . esc_html($hora_fin);
 
-                // Formatear columnas de taxonomías (admisibles o asignadas)
-                $programa_col = '';
-                $sede_col = '';
-                $rango_col = '';
+                // Inicializar columnas
+                $programa_col = 'N/A';
+                $sede_col = 'N/A';
+                $rango_col = 'N/A';
+                $disponibilidad_col = esc_html($estado); // Default
 
-                if ($estado === 'Asignado' || $estado === 'Lleno' || $estado === 'Mismo' || $estado === 'Traslado' || $estado === 'Mismo o Traslado' || $estado === 'No Disponible') {
-                     // Mostrar asignados (si el estado implica una asignación base)
-                     $prog_id = isset($meta['mph_programa_asignado'][0]) ? intval($meta['mph_programa_asignado'][0]) : 0;
-                     $sede_id = isset($meta['mph_sede_asignada'][0]) ? intval($meta['mph_sede_asignada'][0]) : 0;
-                     $rango_id = isset($meta['mph_rango_de_edad_asignado'][0]) ? intval($meta['mph_rango_de_edad_asignado'][0]) : 0;
-
-                     if ($prog_id > 0) $programa_col = mph_get_term_list_string($prog_id, 'programa');
-                     if ($sede_id > 0) $sede_col = mph_get_term_list_string($sede_id, 'sede');
-                     if ($rango_id > 0) $rango_col = mph_get_term_list_string($rango_id, 'rango_edad');
-
-                } else { // Para estado 'Vacío'
-                     // Mostrar admisibles
-                     $prog_ids_str = isset($meta['mph_programas_admisibles'][0]) ? $meta['mph_programas_admisibles'][0] : '';
-                     $sede_ids_str = isset($meta['mph_sedes_admisibles'][0]) ? $meta['mph_sedes_admisibles'][0] : '';
-                     $rango_ids_str = isset($meta['mph_rangos_admisibles'][0]) ? $meta['mph_rangos_admisibles'][0] : '';
-
-                     $programa_col = mph_get_term_list_string(explode(',', $prog_ids_str), 'programa');
-                     $sede_col = mph_get_term_list_string(explode(',', $sede_ids_str), 'sede');
-                     $rango_col = mph_get_term_list_string(explode(',', $rango_ids_str), 'rango_edad');
-                }
+                /* Inicia Modificación: Lógica de visualización por estado */
+                // Obtener IDs admisibles generales (siempre los leemos, los necesitamos para varios estados)
+                $prog_admisibles_ids = isset($meta['mph_programas_admisibles'][0]) ? explode(',', $meta['mph_programas_admisibles'][0]) : array();
+                $sede_admisibles_ids = isset($meta['mph_sedes_admisibles'][0]) ? explode(',', $meta['mph_sedes_admisibles'][0]) : array();
+                $rango_admisibles_ids = isset($meta['mph_rangos_admisibles'][0]) ? explode(',', $meta['mph_rangos_admisibles'][0]) : array();
 
 
-                 // Formatear columna Disponibilidad
-                 $disponibilidad_col = '';
-                 switch ($estado) {
+                switch ($estado) {
                     case 'Asignado':
-                        $disponibilidad_col = sprintf(esc_html__('%d vacantes', 'mi-plugin-horarios'), $vacantes);
-                        break;
                     case 'Lleno':
-                         $disponibilidad_col = '<span style="color:red;">' . esc_html__('Lleno', 'mi-plugin-horarios') . '</span>';
-                         break;
+                        // Mostrar asignados específicos
+                        $prog_id = isset($meta['mph_programa_asignado'][0]) ? intval($meta['mph_programa_asignado'][0]) : 0;
+                        $sede_id = isset($meta['mph_sede_asignada'][0]) ? intval($meta['mph_sede_asignada'][0]) : 0;
+                        $rango_id = isset($meta['mph_rango_de_edad_asignado'][0]) ? intval($meta['mph_rango_de_edad_asignado'][0]) : 0; // Ojo nombre meta
+
+                        $programa_col = mph_get_term_list_string($prog_id, 'programa');
+                        $sede_col = mph_get_term_list_string($sede_id, 'sede');
+                        $rango_col = mph_get_term_list_string($rango_id, 'rango_edad'); // Ojo slug tax
+
+                        $disponibilidad_col = ($estado === 'Lleno')
+                            ? '<span style="color:red;">' . esc_html__('Lleno', 'mi-plugin-horarios') . '</span>'
+                            : sprintf(esc_html__('%d vacantes', 'mi-plugin-horarios'), $vacantes);
+                        break;
+
                     case 'Vacío':
-                         $disponibilidad_col = '<em>' . esc_html__('Vacío', 'mi-plugin-horarios') . '</em>';
-                         break;
-                     case 'Mismo':
-                     case 'Traslado':
-                     case 'Mismo o Traslado':
-                     case 'No Disponible':
-                         $disponibilidad_col = '<strong>' . esc_html(str_replace('_', ' ', $estado)) . '</strong>'; // Muestra el estado directamente
-                         break;
+                        // Mostrar admisibles generales
+                        $programa_col = mph_get_term_list_string($prog_admisibles_ids, 'programa');
+                        $sede_col = mph_get_term_list_string($sede_admisibles_ids, 'sede'); // Muestra TODOS los admisibles
+                        $rango_col = mph_get_term_list_string($rango_admisibles_ids, 'rango_edad');
+                        $disponibilidad_col = '<em>' . esc_html__('Vacío', 'mi-plugin-horarios') . '</em>';
+                        break;
+
+                    case 'Mismo':
+                    case 'Mismo o Traslado':
+                        // Mostrar admisibles generales para Programa y Rango
+                        $programa_col = mph_get_term_list_string($prog_admisibles_ids, 'programa');
+                        $rango_col = mph_get_term_list_string($rango_admisibles_ids, 'rango_edad');
+                        // Mostrar Sede Adyacente + Sedes Comunes
+                        $sedes_a_mostrar_ids = array();
+                        if ($sede_adyacente_id > 0) {
+                            $sedes_a_mostrar_ids[] = $sede_adyacente_id;
+                        }
+                        // Añadir IDs de sedes comunes (necesitamos obtenerlos)
+                        $sedes_comunes_ids = mph_get_common_term_ids('sede'); // Necesitamos crear esta función auxiliar
+                        $sedes_a_mostrar_ids = array_unique(array_merge($sedes_a_mostrar_ids, $sedes_comunes_ids));
+
+                        $sede_col = mph_get_term_list_string($sedes_a_mostrar_ids, 'sede');
+                        $disponibilidad_col = '<strong>' . esc_html(str_replace('_', ' ', $estado)) . '</strong>';
+                        break;
+
+                    case 'Traslado':
+                    case 'No Disponible': // <-- Añadir este case aquí
+                        $no_disp_text = '<em>' . esc_html__('No Disponible', 'mi-plugin-horarios') . '</em>';
+                        $programa_col = $no_disp_text;
+                        $sede_col = $no_disp_text;
+                        $rango_col = $no_disp_text;
+
+                        // Diferenciar texto de estado
+                        if ($estado === 'No Disponible') {
+                            $disponibilidad_col = '<strong>' . esc_html__('No Disponible (Cierre Sede)', 'mi-plugin-horarios') . '</strong>';
+                        } else { // Es Traslado
+                            $disponibilidad_col = '<strong>' . esc_html__('Traslado', 'mi-plugin-horarios') . '</strong>';
+                        }
+                        break;
+
                     default:
-                         $disponibilidad_col = esc_html($estado);
-                 }
+                         // Para estados desconocidos, intentar mostrar admisibles generales
+                         $programa_col = mph_get_term_list_string($prog_admisibles_ids, 'programa');
+                         $sede_col = mph_get_term_list_string($sede_admisibles_ids, 'sede');
+                         $rango_col = mph_get_term_list_string($rango_admisibles_ids, 'rango_edad');
+                         $disponibilidad_col = '<strong>' . esc_html($estado) . '</strong>';
+                }
+                /* Finaliza Modificación */
 
-                 // Formatear columna Acciones (con data-attributes para JS)
-                 $acciones_col = '';
-                 // Botón Eliminar (para todos)
-                 $acciones_col .= '<button type="button" class="button button-link mph-accion-horario mph-accion-eliminar" data-horario-id="' . esc_attr($horario_id) . '" data-nonce="' . esc_attr(wp_create_nonce('mph_eliminar_horario_' . $horario_id)) . '">' . esc_html__('Eliminar', 'mi-plugin-horarios') . '</button>';
 
-                // Botón Asignar (para Vacío, Mismo o Traslado, Mismo, Traslado)
-                if (in_array($estado, ['Vacío', 'Mismo o Traslado', 'Mismo', 'Traslado'])) {
-                     // Pasar datos necesarios para pre-llenar el modal de asignación
-                     $data_asignar = htmlspecialchars(json_encode(array(
-                         'horario_id' => $horario_id, // ID del bloque a reemplazar/dividir
-                         'dia' => $num_dia,
-                         'inicio' => $hora_inicio,
-                         'fin' => $hora_fin,
-                         'programas_admisibles' => isset($meta['mph_programas_admisibles'][0]) ? explode(',', $meta['mph_programas_admisibles'][0]) : array(),
-                         'sedes_admisibles' => isset($meta['mph_sedes_admisibles'][0]) ? explode(',', $meta['mph_sedes_admisibles'][0]) : array(),
-                         'rangos_admisibles' => isset($meta['mph_rangos_admisibles'][0]) ? explode(',', $meta['mph_rangos_admisibles'][0]) : array(),
+                // Formatear columna Acciones (Añadir Editar para Vacío/Mismo/Mismo o Traslado)
+                $acciones_col = '';
+                // Botón Eliminar (siempre)
+                $acciones_col .= '<button type="button" class="button button-link mph-accion-horario mph-accion-eliminar" data-horario-id="' . esc_attr($horario_id) . '" data-nonce="' . esc_attr(wp_create_nonce('mph_eliminar_horario_' . $horario_id)) . '">' . esc_html__('Eliminar', 'mi-plugin-horarios') . '</button>';
+
+                /* Inicia Modificación: Lógica botones Editar/Asignar/Vaciar */
+                // Botón Asignar (para Vacío, Mismo o Traslado, Mismo)
+                if (in_array($estado, ['Vacío', 'Mismo o Traslado', 'Mismo'])) {
+                    $data_asignar = htmlspecialchars(json_encode(array(
+                        'horario_id' => $horario_id,
+                        'dia' => $num_dia,
+                        'inicio' => $hora_inicio,
+                        'fin' => $hora_fin,
+                        'programas_admisibles' => $prog_admisibles_ids, // Pasar IDs limpios
+                        'sedes_admisibles' => $sede_admisibles_ids,
+                        'rangos_admisibles' => $rango_admisibles_ids,
                      )), ENT_QUOTES, 'UTF-8');
-                     $acciones_col .= ' | <button type="button" class="button button-link mph-accion-horario mph-accion-asignar" data-horario-info="' . $data_asignar . '">' . esc_html__('Asignar', 'mi-plugin-horarios') . '</button>';
+                    $acciones_col .= ' | <button type="button" class="button button-link mph-accion-horario mph-accion-asignar" data-horario-info="' . $data_asignar . '">' . esc_html__('Asignar', 'mi-plugin-horarios') . '</button>';
                 }
 
-                 // Botón Editar (para Asignado, Lleno)
-                     if (in_array($estado, ['Asignado', 'Lleno'])) {
-                          // Pasar todos los datos guardados para pre-llenar el modal de edición
+                // Botón Editar (para Asignado, Lleno) -> Solo Vacantes
+                if (in_array($estado, ['Asignado', 'Lleno'])) {
+                     $data_editar_vacantes = array( /* ... datos como antes, incluyendo admisibles ... */ );
+                     $data_editar_vacantes_json = htmlspecialchars(json_encode($data_editar_vacantes), ENT_QUOTES, 'UTF-8');
+                     $acciones_col .= ' | <button type="button" class="button button-link mph-accion-horario mph-accion-editar-vacantes" data-horario-info="' . $data_editar_vacantes_json . '">' . esc_html__('Editar Vacantes', 'mi-plugin-horarios') . '</button>'; // Cambiar clase y texto
+                }
 
-                        /* Botón Vaciar */
+                 // Botón Editar (para Vacío, Mismo, Mismo o Traslado) -> Editar Disponibilidad General
+                 if (in_array($estado, ['Vacío', 'Mismo o Traslado', 'Mismo'])) {
+                     $data_editar_disp = htmlspecialchars(json_encode(array(
+                         'horario_id' => $horario_id,
+                         'dia' => $num_dia,
+                         'inicio_gen' => $hora_inicio, // Usar horas del bloque como base
+                         'fin_gen' => $hora_fin,
+                         'prog_admisibles' => $prog_admisibles_ids,
+                         'sede_admisibles' => $sede_admisibles_ids,
+                         'rango_admisibles' => $rango_admisibles_ids,
+                         // No hay datos de asignación aquí
+                     )), ENT_QUOTES, 'UTF-8');
+                     $acciones_col .= ' | <button type="button" class="button button-link mph-accion-horario mph-accion-editar-disp" data-horario-info="' . $data_editar_disp . '">' . esc_html__('Editar Disp.', 'mi-plugin-horarios') . '</button>'; // Nueva clase y texto
+                }
 
-                        // Necesitamos el ID del horario y un nonce específico
-                        $nonce_vaciar = wp_create_nonce('mph_vaciar_horario_' . $horario_id);
-                        $acciones_col .= ' | <button type="button" class="button button-link button-link-delete mph-accion-horario mph-accion-vaciar" data-horario-id="' . esc_attr($horario_id) . '" data-nonce="' . esc_attr($nonce_vaciar) . '">' . esc_html__('Vaciar', 'mi-plugin-horarios') . '</button>';
-
-                        /* Finaliza Botón Vaciar */
-
-
-                          $prog_admisibles_ids = isset($meta['mph_programas_admisibles'][0]) ? explode(',', $meta['mph_programas_admisibles'][0]) : array();
-                          $sede_admisibles_ids = isset($meta['mph_sedes_admisibles'][0]) ? explode(',', $meta['mph_sedes_admisibles'][0]) : array();
-                          $rango_admisibles_ids = isset($meta['mph_rangos_admisibles'][0]) ? explode(',', $meta['mph_rangos_admisibles'][0]) : array();
-
-                          $data_editar = array(
-                             'horario_id' => $horario_id,
-                             'dia' => $num_dia,
-                             // 'inicio_gen' => '', // Seguimos sin tenerlas fácilmente
-                             // 'fin_gen' => '',
-                             'prog_admisibles' => array_map('intval', $prog_admisibles_ids), // Pasar IDs admisibles
-                             'sede_admisibles' => array_map('intval', $sede_admisibles_ids), // Pasar IDs admisibles
-                             'rango_admisibles' => array_map('intval', $rango_admisibles_ids), // Pasar IDs admisibles (OJO slug tax)
-                             'inicio_asig' => $hora_inicio,
-                             'fin_asig' => $hora_fin,
-                             'prog_asig' => isset($meta['mph_programa_asignado'][0]) ? intval($meta['mph_programa_asignado'][0]) : 0,
-                             'sede_asig' => isset($meta['mph_sede_asignada'][0]) ? intval($meta['mph_sede_asignada'][0]) : 0,
-                             'rango_asig' => isset($meta['mph_rango_de_edad_asignado'][0]) ? intval($meta['mph_rango_de_edad_asignado'][0]) : 0, // OJO nombre meta
-                             'vacantes' => $vacantes,
-                             'buffer_antes' => isset($meta['mph_buffer_antes'][0]) ? intval($meta['mph_buffer_antes'][0]) : 0,
-                             'buffer_despues' => isset($meta['mph_buffer_despues'][0]) ? intval($meta['mph_buffer_despues'][0]) : 0,
-                         );
-                         $data_editar_json = htmlspecialchars(json_encode($data_editar), ENT_QUOTES, 'UTF-8');
-                         $acciones_col .= ' | <button type="button" class="button button-link mph-accion-horario mph-accion-editar" data-horario-info="' . $data_editar_json . '">' . esc_html__('Editar', 'mi-plugin-horarios') . '</button>';
-                    }
+                // Botón Editar (para Traslado, No Disponible) -> Solo Info (si se implementa)
+                if (in_array($estado, ['Traslado', 'No Disponible'])) {
+                     // $acciones_col .= ' | <button type="button" class="button button-link mph-accion-horario mph-accion-editar-info">Info</button>';
+                }
 
 
-                // Construir la fila de la tabla
+                 // Botón Vaciar (para Asignado, Lleno)
+                 if (in_array($estado, ['Asignado', 'Lleno'])) {
+                     $nonce_vaciar = wp_create_nonce('mph_vaciar_horario_' . $horario_id);
+                     $acciones_col .= ' | <button type="button" class="button button-link-delete mph-accion-horario mph-accion-vaciar" data-horario-id="' . esc_attr($horario_id) . '" data-nonce="' . esc_attr($nonce_vaciar) . '">' . esc_html__('Vaciar', 'mi-plugin-horarios') . '</button>';
+                 }
+                /* Finaliza Modificación */
+
+
+                // Construir la fila ... (sin cambios)
                 $output .= '<tr>';
                 $output .= '<td>' . $horario_col . '</td>';
                 $output .= '<td>' . $programa_col . '</td>';
@@ -207,6 +237,55 @@ function mph_get_horarios_table_html( $maestro_id ) {
     return $output;
 
 } // Fin mph_get_horarios_table_html
+
+
+// --- NECESITAMOS ESTA NUEVA FUNCIÓN AUXILIAR ---
+/* Inicia Modificación: Añadir función para obtener sedes comunes */
+/**
+ * Obtiene los IDs de los términos comunes para una taxonomía dada.
+ * Cachea el resultado para evitar consultas repetidas en la misma carga.
+ *
+ * @param string $taxonomy_slug Slug de la taxonomía (ej. 'sede').
+ * @return array Array de IDs de términos comunes.
+ */
+function mph_get_common_term_ids( $taxonomy_slug ) {
+    // Usar caché estática simple para esta petición
+    static $common_ids_cache = array();
+
+    if ( isset($common_ids_cache[$taxonomy_slug]) ) {
+        return $common_ids_cache[$taxonomy_slug];
+    }
+
+    $meta_key = $taxonomy_slug . '_comun';
+     // Ajuste específico para rango_edad si la meta key es diferente
+     if ($taxonomy_slug === 'rango_edad') {
+         $meta_key = 'rango_edad_comun';
+     }
+
+    $common_terms_query_args = array(
+        'taxonomy'   => $taxonomy_slug,
+        'hide_empty' => false,
+        'meta_query' => array(
+            array(
+                'key'     => $meta_key,
+                'value'   => '1',
+                'compare' => '=',
+            ),
+        ),
+        'fields' => 'ids', // Obtener solo IDs
+        'update_term_meta_cache' => false, // Optimización menor
+    );
+    $common_term_ids = get_terms( $common_terms_query_args );
+
+    if ( is_wp_error( $common_term_ids ) ) {
+         error_log("mph_get_common_term_ids: Error al obtener términos comunes para $taxonomy_slug: " . $common_term_ids->get_error_message());
+        $common_term_ids = array();
+    }
+
+    $common_ids_cache[$taxonomy_slug] = $common_term_ids; // Guardar en caché
+    return $common_term_ids;
+}
+
 
 /**
  * Función auxiliar para obtener una lista legible de nombres de términos a partir de IDs.

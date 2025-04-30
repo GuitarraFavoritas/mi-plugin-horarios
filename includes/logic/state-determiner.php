@@ -56,7 +56,7 @@ function mph_determinar_estado_buffer( $maestro_id, $dia_semana, $hora_inicio_st
             $dt_hora_cierre = new DateTime($base_date . $hora_cierre_sede_adyacente);
             if ($dt_inicio_buffer >= $dt_hora_cierre) {
                 error_log("$log_prefix Estado = No Disponible (Inicio buffer >= Hora Cierre)");
-                return 'No Disponible x CIERRE de sede';
+                return 'No Disponible';
             }
         } catch (Exception $e) {
             error_log("$log_prefix Error comparando hora cierre: " . $e->getMessage());

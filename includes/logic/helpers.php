@@ -17,30 +17,31 @@ if ( ! defined( 'ABSPATH' ) ) {
  * Función auxiliar para crear la estructura de un sub-bloque de horario.
  * Prepara un array con los datos necesarios para crear o actualizar un post 'horario'.
  *
- * @param int $maestro_id ID del Maestro.
- * @param int $dia_semana Día de la semana (1-7).
- * @param string $hora_inicio_str Hora de inicio (ej. '09:00').
- * @param string $hora_fin_str Hora de fin (ej. '10:00').
- * @param string $estado Estado del bloque ('Vacío', 'Asignado', 'Lleno', 'Mismo', 'Traslado', etc.).
- * @param array $programas_admisibles IDs de programas admisibles para este bloque específico.
- * @param array $sedes_admisibles IDs de sedes admisibles para este bloque específico.
- * @param array $rangos_admisibles IDs de rangos de edad admisibles para este bloque específico.
- * @param int $vacantes Número de vacantes (si aplica, default 0).
- * @param int $programa_asignado ID del programa asignado (si aplica, default 0).
- * @param int $sede_asignada ID de la sede asignada (si aplica, default 0).
- * @param int $rango_asignado ID del rango de edad asignado (si aplica, default 0).
- * @param int $buffer_antes Buffer 'antes' original de la asignación (si aplica, default 0).
- * @param int $buffer_despues Buffer 'después' original de la asignación (si aplica, default 0).
- * @return array Estructura del bloque lista para ser procesada.
+* @param int $maestro_id
+* @param int $dia_semana
+* @param string $hora_inicio_str
+* @param string $hora_fin_str
+* @param string $estado
+* @param array $programas_admisibles IDs generales admisibles.
+* @param array $sedes_admisibles IDs generales admisibles.
+* @param array $rangos_admisibles IDs generales admisibles.
+* @param int $vacantes
+* @param int $programa_asignado
+* @param int $sede_asignada ID de la sede específica asignada a ESTE bloque (si aplica).
+* @param int $rango_asignado
+* @param int $buffer_antes
+* @param int $buffer_despues
+* @param int $sede_adyacente_id ID de la sede de la clase ASIGNADA adyacente (para buffers). <-- NUEVO PARÁMETRO
+* @return array Estructura del bloque lista para ser procesada.
  */
 function mph_crear_sub_bloque( $maestro_id, $dia_semana, $hora_inicio_str, $hora_fin_str, $estado,
                                $programas_admisibles, $sedes_admisibles, $rangos_admisibles,
                                $vacantes = 0, $programa_asignado = 0, $sede_asignada = 0, $rango_asignado = 0,
-                               $buffer_antes = 0, $buffer_despues = 0 ) {
+                               $buffer_antes = 0, $buffer_despues = 0, $sede_adyacente_id = 0 ) {
 
     // Log detallado de la creación del bloque
     $log_prefix = "mph_crear_sub_bloque:";
-    error_log("$log_prefix Creando bloque - Maestro: $maestro_id, Dia: $dia_semana, Hora: $hora_inicio_str-$hora_fin_str, Estado: $estado, Vacantes: $vacantes, ProgAsig: $programa_asignado, SedeAsig: $sede_asignada, RangoAsig: $rango_asignado");
+    error_log("$log_prefix Creando bloque - Maestro: $maestro_id, Dia: $dia_semana, Hora: $hora_inicio_str-$hora_fin_str, Estado: $estado, Vacantes: $vacantes, ProgAsig: $programa_asignado, SedeAsig: $sede_asignada, RangoAsig: $rango_asignado, SedeAdy: $sede_adyacente_id");
 
     // Asegurarse de que los arrays de admisibles sean arrays y contengan enteros
     $programas_admisibles = !empty($programas_admisibles) ? array_map('intval', (array)$programas_admisibles) : array();
@@ -76,6 +77,7 @@ function mph_crear_sub_bloque( $maestro_id, $dia_semana, $hora_inicio_str, $hora
         'mph_rango_de_edad_asignado' => intval($rango_asignado),
         'mph_buffer_antes'           => intval($buffer_antes), // Buffer original que generó este bloque (si aplica)
         'mph_buffer_despues'         => intval($buffer_despues), // Buffer original que generó este bloque (si aplica)
+        'mph_sede_adyacente'         => intval($sede_adyacente_id),
     );
     error_log("$log_prefix Meta Input preparado: " . print_r($meta_input_data, true));
 
