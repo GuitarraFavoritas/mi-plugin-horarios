@@ -16,6 +16,10 @@ __webpack_require__.r(__webpack_exports__);
 /* harmony import */ var jquery__WEBPACK_IMPORTED_MODULE_0___default = /*#__PURE__*/__webpack_require__.n(jquery__WEBPACK_IMPORTED_MODULE_0__);
 /* harmony import */ var _modal_validation__WEBPACK_IMPORTED_MODULE_1__ = __webpack_require__(/*! ./modal-validation */ "./assets/src/js/admin/modal-validation.js");
 /* harmony import */ var _modal_init__WEBPACK_IMPORTED_MODULE_2__ = __webpack_require__(/*! ./modal-init */ "./assets/src/js/admin/modal-init.js");
+function _typeof(o) { "@babel/helpers - typeof"; return _typeof = "function" == typeof Symbol && "symbol" == typeof Symbol.iterator ? function (o) { return typeof o; } : function (o) { return o && "function" == typeof Symbol && o.constructor === Symbol && o !== Symbol.prototype ? "symbol" : typeof o; }, _typeof(o); }
+function _defineProperty(e, r, t) { return (r = _toPropertyKey(r)) in e ? Object.defineProperty(e, r, { value: t, enumerable: !0, configurable: !0, writable: !0 }) : e[r] = t, e; }
+function _toPropertyKey(t) { var i = _toPrimitive(t, "string"); return "symbol" == _typeof(i) ? i : i + ""; }
+function _toPrimitive(t, r) { if ("object" != _typeof(t) || !t) return t; var e = t[Symbol.toPrimitive]; if (void 0 !== e) { var i = e.call(t, r || "default"); if ("object" != _typeof(i)) return i; throw new TypeError("@@toPrimitive must return a primitive value."); } return ("string" === r ? String : Number)(t); }
 // assets/src/js/admin/modal-ajax.js
 
 
@@ -26,14 +30,11 @@ __webpack_require__.r(__webpack_exports__);
  * @param {jQuery} $modal - El objeto jQuery del elemento modal.
  */
 function initAjaxSubmit($modal) {
-  /* Inicia Modificación: Corregir log y asegurar $modal es válido */
   console.log("Inicializando manejador CLICK para #mph-guardar-horario...");
   if (!$modal || !$modal.length || typeof $modal.find !== 'function') {
     console.error("initAjaxSubmit: No se recibió el objeto $modal válido.");
     return;
   }
-  /* Finaliza Modificación */
-
   var $spinnerModal = $modal.find('.mph-modal-acciones .spinner');
   var $feedbackModal = $modal.find('.mph-modal-feedback');
   var $errorModal = $modal.find('.mph-modal-error');
@@ -49,11 +50,36 @@ function initAjaxSubmit($modal) {
       alert("Error interno del formulario.");
       return;
     }
-    console.log('Llamando a validarFormulario...');
-    if (!(0,_modal_validation__WEBPACK_IMPORTED_MODULE_1__.validarFormulario)($form)) {
-      console.log('validarFormulario devolvió false. Envío detenido.');
-      return;
+    var actionMode = $button.attr('data-action-mode') || 'save_full';
+    console.log("Modo de Acción:", actionMode);
+
+    // --- Validación ---
+    var isValid = false;
+    /* Inicia Modificación: Asegurar que la validación correcta se llama */
+    if (actionMode === 'update_vacantes') {
+      console.log("Validando solo vacantes...");
+      var $vacantesInput = $form.find('#mph_vacantes'); // Buscar input
+      var vacantesVal = parseInt($vacantesInput.val(), 10);
+      // Validar si es número y no negativo
+      if ($vacantesInput.length && !isNaN(vacantesVal) && vacantesVal >= 0) {
+        isValid = true;
+        if ($errorModal.length) $errorModal.hide().text(''); // Limpiar error si es válido
+      } else {
+        var _window$mph_admin_obj;
+        isValid = false;
+        if ($errorModal.length) $errorModal.text(((_window$mph_admin_obj = window.mph_admin_obj) === null || _window$mph_admin_obj === void 0 || (_window$mph_admin_obj = _window$mph_admin_obj.i18n) === null || _window$mph_admin_obj === void 0 ? void 0 : _window$mph_admin_obj.error_vacantes_negativas) || 'Las vacantes deben ser un número positivo.').show();
+      }
+      console.log("Resultado Validación Vacantes:", isValid);
+    } else {
+      // save_full
+      console.log('Llamando a validarFormulario (modo save_full)...');
+      isValid = (0,_modal_validation__WEBPACK_IMPORTED_MODULE_1__.validarFormulario)($form); // Llama a la función completa
+      if (!isValid) console.log('validarFormulario (save_full) devolvió false.');
     }
+    if (!isValid) {
+      return;
+    } // Detener si no es válido
+
     console.log('Validación pasada. Procediendo con AJAX...');
 
     // Feedback visual
@@ -73,30 +99,63 @@ function initAjaxSubmit($modal) {
       return; // Detener si falta
     }
 
-    // Si llegamos aquí, el objeto y ajax_url son válidos.
-    var ajax_url = mph_admin_obj.ajax_url;
-    // const nonce = mph_admin_obj.nonce; // Ya no necesitamos el nonce de mph_admin_obj
-    var i18n = mph_admin_obj.i18n || {};
+    // --- Preparar Datos AJAX según el modo ---
+    var dataToSend = '';
+    var ajaxAction = ''; // Variable para la acción
 
-    // Nombre del campo nonce (debe coincidir con wp_nonce_field en PHP)
-    var nonceFieldName = 'mph_nonce_guardar'; // Nuevo nombre del campo
-    var $nonceField = $form.find('input[name="' + nonceFieldName + '"]');
     var nonceValue = '';
-    if ($nonceField.length) {
-      nonceValue = $nonceField.val();
-      console.log("Valor del campo nonce (".concat(nonceFieldName, ") le\xEDdo del DOM:"), nonceValue);
+    var nonceFieldName = '';
+
+    // const nonceFieldName = 'mph_nonce_guardar';
+    // const $nonceField = $form.find('input[name="' + nonceFieldName + '"]');
+    // let nonceValue = $nonceField.length ? $nonceField.val() : '';
+    // if (!nonceValue) { /* ... error nonce no encontrado ... */ return; }
+
+    if (actionMode === 'update_vacantes') {
+      ajaxAction = 'mph_actualizar_vacantes';
+      nonceFieldName = 'mph_nonce_actualizar_vacantes'; // Nombre del nuevo nonce field
+      var $nonceField = $form.find('input[name="' + nonceFieldName + '"]');
+      if ($nonceField.length) {
+        nonceValue = $nonceField.val();
+      } else {
+        console.error("Campo Nonce para Actualizar Vacantes no encontrado!"); /* ... error ... */
+        return;
+      }
+      var horarioId = $form.find('#mph_horario_id_editando').val();
+      var _vacantesVal = $form.find('#mph_vacantes').val();
+      dataToSend = _defineProperty({
+        // Construir objeto
+        action: ajaxAction,
+        horario_id: horarioId,
+        vacantes: _vacantesVal
+      }, nonceFieldName, nonceValue);
+      console.log('Datos a enviar (update_vacantes):', dataToSend);
     } else {
-      console.error("\xA1Error cr\xEDtico! No se encontr\xF3 el campo nonce \"".concat(nonceFieldName, "\" en el formulario."));
-      if ($errorModal.length) $errorModal.text("Error de seguridad interno (Falta campo Nonce).").show();
-      $button.prop('disabled', false);
-      if ($spinnerModal.length) $spinnerModal.removeClass('is-active');
-      return;
+      // save_full
+      ajaxAction = 'mph_guardar_horario_maestro';
+      nonceFieldName = 'mph_nonce_guardar'; // Nombre del nonce field original
+      var _$nonceField = $form.find('input[name="' + nonceFieldName + '"]');
+      if (_$nonceField.length) {
+        nonceValue = _$nonceField.val();
+      } else {
+        console.error("Campo Nonce para Guardar no encontrado!"); /* ... error ... */
+        return;
+      }
+      var _formData = $form.serialize(); // Obtener todos los datos
+      // Crear dataToSend como objeto también para consistencia (opcional)
+      // O seguir con string: dataToSend = formData + '&action=' + ajaxAction;
+      // Si usamos objeto, necesitamos parsear formData o añadir campos manualmente
+      // Mantengamos string por ahora para save_full:
+      dataToSend = _formData + '&action=' + ajaxAction; // formData ya incluye nonce guardar
+      console.log('Datos COMPLETOS a enviar (save_full):', dataToSend);
     }
 
-    // Construir dataToSend: acción + formData (que ya incluye nonce)
-    // NO necesitamos añadir el nonce explícitamente si está en formData
-    var dataToSend = formData + '&action=mph_guardar_horario_maestro';
-    console.log('Datos COMPLETOS a enviar (formData incluye nonce):', dataToSend);
+    // --- Enviar Petición AJAX ---
+    if (!window.mph_admin_obj || !window.mph_admin_obj.ajax_url) {
+      /*...*/return;
+    }
+    var ajax_url = window.mph_admin_obj.ajax_url;
+    var i18n = window.mph_admin_obj.i18n || {};
 
     // Petición AJAX
     jquery__WEBPACK_IMPORTED_MODULE_0___default().post(ajax_url, dataToSend).done(function (response) {
@@ -132,9 +191,7 @@ function initAjaxSubmit($modal) {
     });
   }); // Fin click #mph-guardar-horario
 
-  /* Inicia Modificación: Corregir log final */
   console.log("Manejador CLICK para #mph-guardar-horario inicializado.");
-  /* Finaliza Modificación */
 } // Fin initAjaxSubmit
 
 /***/ }),
@@ -508,9 +565,17 @@ function resetModalForm($dialogElement) {
   console.log('Formulario encontrado en resetModalForm. Reseteando...');
   try {
     $form[0].reset(); // Reset nativo
+    $form.find('#mph_horario_id_editando').val('');
 
-    // Reset específico para nuestros campos (usando selectores buscados DENTRO del form o globales)
-    $form.find('#mph_horario_id_editando').val(''); // Limpiar ID
+    // --- Restaurar Visibilidad ---
+
+    $dialogElement.removeClass('mph-modal-mode-edit-vacantes mph-modal-mode-edit-disp mph-modal-mode-assign'); // Quitar clases de modo
+
+    $dialogElement.find('#mph-editar-info').hide().empty();
+    $form.find('.mph-modal-seccion.mph-disponibilidad-general').show(); // Mostrar sección general
+    $form.find('.mph-modal-seccion.mph-asignacion-especifica').hide(); // Ocultar sección asignación
+    $form.find('#mph-mostrar-asignacion').show(); // Mostrar botón toggle
+    /* Finaliza Modificación */
 
     // Reset checkboxes comunes (requiere mph_admin_obj disponible globalmente o pasado)
     if (window.mph_admin_obj) {
@@ -544,18 +609,28 @@ function resetModalForm($dialogElement) {
       value: '',
       text: '-- Seleccionar --'
     })); // Texto genérico
-    $form.find('.mph-asignacion-especifica').hide();
 
     // Resetear errores y valores por defecto
-    $dialogElement.find('.mph-error-hora, .mph-error-duplicado, .mph-error-hora-asignada').hide(); // Buscar errores dentro del diálogo
-    $form.find('#mph_vacantes').val(1);
+    $dialogElement.find('.mph-error-hora, .mph-error-duplicado, .mph-error-hora-asignada').hide();
+    $dialogElement.find('.mph-modal-feedback, .mph-modal-error').hide().text('');
+    $form.find('#mph_vacantes').val(1); // Restaurar valor vacantes
     $form.find('#mph_buffer_minutos_antes').val(60);
     $form.find('#mph_buffer_minutos_despues').val(60);
     $form.find('#mph_buffer_linkeado').prop('checked', true);
+
+    // Restaurar Botón Guardar
+    var $btnGuardar = $form.find('#mph-guardar-horario');
+    if ($btnGuardar.length) {
+      var _window$mph_admin_obj;
+      var textoOriginal = ((_window$mph_admin_obj = window.mph_admin_obj) === null || _window$mph_admin_obj === void 0 || (_window$mph_admin_obj = _window$mph_admin_obj.i18n) === null || _window$mph_admin_obj === void 0 ? void 0 : _window$mph_admin_obj.guardar_horario) || 'Guardar Disponibilidad/Asignación';
+      $btnGuardar.text(textoOriginal);
+      $btnGuardar.removeAttr('data-action-mode'); // Limpiar modo
+    }
+    console.log("Visibilidad y botón guardar restaurados a default.");
   } catch (e) {
     console.error("Error durante resetModalForm:", e);
   }
-}
+} // Fin resetModalForm
 
 /***/ }),
 
@@ -723,16 +798,86 @@ __webpack_require__.r(__webpack_exports__);
 /* harmony import */ var jquery__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(/*! jquery */ "jquery");
 /* harmony import */ var jquery__WEBPACK_IMPORTED_MODULE_0___default = /*#__PURE__*/__webpack_require__.n(jquery__WEBPACK_IMPORTED_MODULE_0__);
 /* harmony import */ var _modal_init__WEBPACK_IMPORTED_MODULE_1__ = __webpack_require__(/*! ./modal-init */ "./assets/src/js/admin/modal-init.js");
-/* harmony import */ var _modal_form_interaction__WEBPACK_IMPORTED_MODULE_2__ = __webpack_require__(/*! ./modal-form-interaction */ "./assets/src/js/admin/modal-form-interaction.js");
-function _typeof(o) { "@babel/helpers - typeof"; return _typeof = "function" == typeof Symbol && "symbol" == typeof Symbol.iterator ? function (o) { return typeof o; } : function (o) { return o && "function" == typeof Symbol && o.constructor === Symbol && o !== Symbol.prototype ? "symbol" : typeof o; }, _typeof(o); }
 // assets/src/js/admin/table-actions.js
 
 
 
-// Podríamos necesitar una función específica para pre-llenar el formulario
-// import { prefillModalForAssignment } from './modal-helpers'; // (La crearemos si es necesario)
+/**
+ * Prepara el modal para el modo "Editar Vacantes".
+ * @param {jQuery} $modal - El objeto jQuery del modal.
+ * @param {object} horarioInfo - El objeto con la info del horario.
+ */
+function prepareModalForEditVacantes($modal, horarioInfo) {
+  var $form = $modal.find('form#mph-form-horario');
+  if (!$form.length) return;
+  console.log("Preparando modal para Editar Vacantes...");
 
-// import { openModal, resetModalForm, /* otras funciones como prellenarFormulario */ } from './modal-init';
+  // 1. Aplicar clase CSS (el CSS controla qué se muestra/oculta)
+  $modal.removeClass('mph-modal-mode-assign mph-modal-mode-edit-disp').addClass('mph-modal-mode-edit-vacantes');
+
+  // 2. Mostrar/Crear y llenar div de información #mph-editar-info
+  var $infoDiv = $form.find('#mph-editar-info');
+  if (!$infoDiv.length) {
+    $form.prepend('<div id="mph-editar-info" style="margin-bottom:15px; padding-bottom:10px; border-bottom:1px solid #eee;"></div>');
+    $infoDiv = $form.find('#mph-editar-info'); // Re-buscar después de añadir
+  }
+
+  // Construir el HTML de información
+  var infoHtml = '<h4>Editando Vacantes para:</h4>'; // Definir ANTES del if(horarioInfo)
+  if (horarioInfo) {
+    var dias = ['', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado', 'Domingo'];
+    infoHtml += "<p><strong>D\xEDa:</strong> ".concat(dias[horarioInfo.dia] || 'N/A', "</p>");
+    infoHtml += "<p><strong>Horario:</strong> ".concat(horarioInfo.inicio_asig || 'N/A', " - ").concat(horarioInfo.fin_asig || 'N/A', "</p>");
+    if (window.mph_admin_obj) {
+      var _mph_admin_obj$todos_, _mph_admin_obj$todas_, _mph_admin_obj$todos_2;
+      var prog = (_mph_admin_obj$todos_ = mph_admin_obj.todos_programas) === null || _mph_admin_obj$todos_ === void 0 ? void 0 : _mph_admin_obj$todos_.find(function (p) {
+        return p.term_id == horarioInfo.prog_asig;
+      });
+      var sede = (_mph_admin_obj$todas_ = mph_admin_obj.todas_sedes) === null || _mph_admin_obj$todas_ === void 0 ? void 0 : _mph_admin_obj$todas_.find(function (s) {
+        return s.term_id == horarioInfo.sede_asig;
+      });
+      var rango = (_mph_admin_obj$todos_2 = mph_admin_obj.todos_rangos) === null || _mph_admin_obj$todos_2 === void 0 ? void 0 : _mph_admin_obj$todos_2.find(function (r) {
+        return r.term_id == horarioInfo.rango_asig;
+      });
+      infoHtml += "<p><strong>Programa:</strong> ".concat((prog === null || prog === void 0 ? void 0 : prog.name) || 'N/A', "</p>");
+      infoHtml += "<p><strong>Sede:</strong> ".concat((sede === null || sede === void 0 ? void 0 : sede.name) || 'N/A', "</p>");
+      infoHtml += "<p><strong>Rango Edad:</strong> ".concat((rango === null || rango === void 0 ? void 0 : rango.name) || 'N/A', "</p>");
+    }
+  } else {
+    infoHtml += '<p>Error al cargar información del horario.</p>'; // Añadir al HTML existente
+  }
+
+  // Asignar el HTML al div (si existe)
+  if ($infoDiv.length) {
+    $infoDiv.html(infoHtml); // Asignar el HTML construido
+    // El CSS se encarga de mostrarlo porque el modal tiene la clase .mph-modal-mode-edit-vacantes
+  } else {
+    console.warn("Div #mph-editar-info no encontrado, info no mostrada.");
+  }
+
+  // 3. Pre-llenar input Vacantes
+  var $vacantesInput = $form.find('#mph_vacantes');
+  if ($vacantesInput.length) {
+    $vacantesInput.val((horarioInfo === null || horarioInfo === void 0 ? void 0 : horarioInfo.vacantes) !== undefined ? horarioInfo.vacantes : 0);
+    console.log("Campo vacantes prellenado con:", $vacantesInput.val());
+  } else {
+    console.error("Input de Vacantes no encontrado al preparar modal.");
+  }
+
+  // 4. Ajustar botón Guardar
+  var $btnGuardar = $form.find('#mph-guardar-horario');
+  if ($btnGuardar.length) {
+    var _window$mph_admin_obj;
+    var textoBoton = ((_window$mph_admin_obj = window.mph_admin_obj) === null || _window$mph_admin_obj === void 0 || (_window$mph_admin_obj = _window$mph_admin_obj.i18n) === null || _window$mph_admin_obj === void 0 ? void 0 : _window$mph_admin_obj.actualizar_vacantes) || 'Actualizar Vacantes';
+    $btnGuardar.text(textoBoton);
+    $btnGuardar.attr('data-action-mode', 'update_vacantes');
+    console.log("Botón Guardar ajustado para 'update_vacantes'.");
+  }
+
+  // 5. Establecer ID
+  $form.find('#mph_horario_id_editando').val((horarioInfo === null || horarioInfo === void 0 ? void 0 : horarioInfo.horario_id) || '');
+  console.log("ID horario establecido:", horarioInfo === null || horarioInfo === void 0 ? void 0 : horarioInfo.horario_id);
+}
 
 /**
  * Inicializa los manejadores de eventos para los botones de acción en la tabla de horarios.
@@ -814,17 +959,13 @@ function initTableActions(tableContainerSelector) {
       // 1. Leer el atributo data-* usando jQuery. jQuery intenta parsear automáticamente.
       var horarioInfo = $button.data('horario-info');
       console.log('Info Horario Objeto (de .data()):', horarioInfo);
-
-      // 2. Verificar si obtuvimos un objeto válido
-      if (!horarioInfo || _typeof(horarioInfo) !== 'object') {
-        throw new Error("No se pudo obtener un objeto válido de data-horario-info.");
-      }
-
-      // 3. Obtener referencia al modal (necesario para funciones de modal)
       var $modal = jquery__WEBPACK_IMPORTED_MODULE_0___default()('#mph-modal-horario');
       if (!$modal.length) {
-        console.error("Error: Modal #mph-modal-horario no encontrado.");
-        return;
+        throw new Error("No se pudo obtener un objeto válido de data-horario-info.");
+      }
+      var $form = $modal.find('form#mph-form-horario');
+      if (!$form.length) {
+        throw new Error("No se pudo obtener un objeto válido de data-horario-info.");
       }
 
       // 4. Resetear el formulario completamente
@@ -833,12 +974,11 @@ function initTableActions(tableContainerSelector) {
 
       // 5. Pre-llenar campos de Disponibilidad General
       console.log("Pre-llenando campos generales...");
-      $modal.find('#mph_dia_semana').val(horarioInfo.dia || '');
-      $modal.find('#mph_hora_inicio_general').val(horarioInfo.inicio || '');
-      $modal.find('#mph_hora_fin_general').val(horarioInfo.fin || '');
+      $form.find('#mph_dia_semana').val(horarioInfo.dia || ''); // Buscar dentro de $form
+      $form.find('#mph_hora_inicio_general').val(horarioInfo.inicio || '');
+      $form.find('#mph_hora_fin_general').val(horarioInfo.fin || '');
 
-      // 6. Pre-seleccionar checkboxes admisibles
-      // (resetModalForm ya debería marcar los comunes, aquí marcamos los específicos de este bloque)
+      // 6. Pre-seleccionar checkboxes
       if (horarioInfo.programas_admisibles && Array.isArray(horarioInfo.programas_admisibles)) {
         horarioInfo.programas_admisibles.forEach(function (id) {
           if (id) $modal.find('#programa_' + id).prop('checked', true);
@@ -858,37 +998,36 @@ function initTableActions(tableContainerSelector) {
       console.log("Checkboxes admisibles pre-seleccionados.");
 
       // 7. Mostrar sección de asignación específica y poblar sus selects
-      console.log("Mostrando sección de asignación...");
-      var $seccionAsignacion = $modal.find('.mph-asignacion-especifica');
-      if ($seccionAsignacion.length) {
-        // Llamar a poblarSelects (necesitaríamos importarla o rehacer la lógica aquí)
-        // Por ahora, asumimos que existe una función global o la importamos si es necesario.
-        // Necesita ejecutarse DESPUÉS de marcar los checkboxes.
-        if (typeof _modal_form_interaction__WEBPACK_IMPORTED_MODULE_2__.poblarSelectsAsignacion === "function") {
-          // ¿Está disponible globalmente? (No ideal)
-          (0,_modal_form_interaction__WEBPACK_IMPORTED_MODULE_2__.poblarSelectsAsignacion)($modal); // Necesita $modal si busca elementos internos
-          console.log("Selects de asignación poblados.");
-        } else {
-          console.warn("Función poblarSelectsAsignacion no encontrada/importada en table-actions.js");
-          // Podríamos llamar al trigger change de los checkboxes para que se actualice si el listener está activo
-          $modal.find('#mph-programas-admisibles-container input:checked').first().trigger('change');
-        }
+      // console.log("Mostrando sección de asignación...");
+      // const $seccionAsignacion = $modal.find('.mph-asignacion-especifica');
+      // if ($seccionAsignacion.length) {
+      //     // Llamar a poblarSelects (necesitaríamos importarla o rehacer la lógica aquí)
+      //     // Por ahora, asumimos que existe una función global o la importamos si es necesario.
+      //     // Necesita ejecutarse DESPUÉS de marcar los checkboxes.
+      //     if (typeof poblarSelectsAsignacion === "function") { // ¿Está disponible globalmente? (No ideal)
+      //         poblarSelectsAsignacion($modal); // Necesita $modal si busca elementos internos
+      //         console.log("Selects de asignación poblados.");
+      //     } else {
+      //          console.warn("Función poblarSelectsAsignacion no encontrada/importada en table-actions.js");
+      //          // Podríamos llamar al trigger change de los checkboxes para que se actualice si el listener está activo
+      //          $modal.find('#mph-programas-admisibles-container input:checked').first().trigger('change');
+      //     }
 
-        // Pre-llenar horas de asignación con las generales (que acabamos de poner)
-        $modal.find('#mph_hora_inicio_asignada').val(horarioInfo.inicio || '');
-        $modal.find('#mph_hora_fin_asignada').val(horarioInfo.fin || '');
-        console.log("Horas de asignación pre-llenadas.");
+      // Pre-llenar horas de asignación con las generales (que acabamos de poner)
+      $modal.find('#mph_hora_inicio_asignada').val(horarioInfo.inicio || '');
+      $modal.find('#mph_hora_fin_asignada').val(horarioInfo.fin || '');
+      console.log("Horas de asignación pre-llenadas.");
 
-        // Mostrar la sección (sin animación para rapidez)
-        $seccionAsignacion.show();
-        console.log("Sección de asignación mostrada.");
-      } else {
-        console.error("Error: Sección de asignación no encontrada en el modal.");
-      }
+      //     // Mostrar la sección (sin animación para rapidez)
+      //     $seccionAsignacion.show();
+      //     console.log("Sección de asignación mostrada.");
+      // } else {
+      //      console.error("Error: Sección de asignación no encontrada en el modal.");
+      // }
 
       // 8. Añadir el ID del horario original que se va a reemplazar/dividir
       $modal.find('#mph_horario_id_editando').val(horarioInfo.horario_id || '');
-      console.log("ID de horario original (" + horarioInfo.horario_id + ") establecido para edición.");
+      console.log("ID de horario original (" + (horarioInfo.horario_id || 'N/A') + ") establecido para reemplazo.");
 
       // 9. Abrir el modal
       console.log("Abriendo modal para asignar...");
@@ -899,91 +1038,30 @@ function initTableActions(tableContainerSelector) {
     }
   });
 
-  // --- Acción Editar ---
-  $tableContainer.on('click', '.mph-accion-editar', function (e) {
+  // --- Acción Editar (Disponibilidad) --- (Placeholder por ahora)
+  $tableContainer.on('click', '.mph-accion-editar-disp', function (e) {
+    e.preventDefault();
+    console.log('Botón Editar Disp. clickeado (Funcionalidad Pendiente)');
+    alert('Editar Disponibilidad aún no implementado.');
+    // TODO: Lógica similar a Asignar pero pre-llenando el modal completo
+  });
+
+  // --- Acción Editar Vacantes ---
+  $tableContainer.on('click', '.mph-accion-editar-vacantes', function (e) {
     e.preventDefault();
     var $button = jquery__WEBPACK_IMPORTED_MODULE_0___default()(this);
-    console.log('Botón Editar clickeado.');
+    console.log('Botón Editar Vacantes clickeado.');
     try {
-      // 1. Leer y parsear datos (jQuery lo hace automáticamente)
       var horarioInfo = $button.data('horario-info');
-      console.log('Info Horario Objeto (para Editar):', horarioInfo);
-      if (!horarioInfo || _typeof(horarioInfo) !== 'object') {
-        throw new Error("No se pudo obtener un objeto válido de data-horario-info.");
-      }
-
-      // 2. Obtener referencia al modal
+      // ... (verificación horarioInfo) ...
       var $modal = jquery__WEBPACK_IMPORTED_MODULE_0___default()('#mph-modal-horario');
       if (!$modal.length) {
-        throw new Error("Modal #mph-modal-horario no encontrado.");
+        throw new Error(/* ... */);
       }
-
-      // 3. Resetear el formulario
-      console.log("Reseteando modal antes de editar...");
-      (0,_modal_init__WEBPACK_IMPORTED_MODULE_1__.resetModalForm)($modal);
-
-      // 4. Pre-llenar TODOS los campos con horarioInfo
-      console.log("Pre-llenando TODOS los campos para editar...");
-
-      // --- Campos Generales ---
-      $modal.find('#mph_dia_semana').val(horarioInfo.dia || '');
-      console.log("Pre-llenando horas generales con horas asignadas para editar...");
-      $modal.find('#mph_hora_inicio_general').val(horarioInfo.inicio_asig || ''); // Usar inicio_asig
-      $modal.find('#mph_hora_fin_general').val(horarioInfo.fin_asig || ''); // Usar fin_asig
-
-      // Checkboxes admisibles (marcar comunes + específicos de este bloque si los pasamos)
-      // resetModalForm ya marca comunes. Marcar los específicos si los incluimos en horarioInfo.prog_admisibles etc.
-      if (horarioInfo.prog_admisibles && Array.isArray(horarioInfo.prog_admisibles)) {
-        horarioInfo.prog_admisibles.forEach(function (id) {
-          if (id) $modal.find('#programa_' + id).prop('checked', true);
-        });
-      }
-      if (horarioInfo.sede_admisibles && Array.isArray(horarioInfo.sede_admisibles)) {
-        horarioInfo.sede_admisibles.forEach(function (id) {
-          if (id) $modal.find('#sede_' + id).prop('checked', true);
-        });
-      }
-      if (horarioInfo.rango_admisibles && Array.isArray(horarioInfo.rango_admisibles)) {
-        horarioInfo.rango_admisibles.forEach(function (id) {
-          if (id) $modal.find('#rango_edad_' + id).prop('checked', true);
-        }); // Usar slug correcto
-      }
-      console.log("Checkboxes admisibles pre-seleccionados para editar.");
-
-      // --- Campos Específicos ---
-      $modal.find('#mph_hora_inicio_asignada').val(horarioInfo.inicio_asig || '');
-      $modal.find('#mph_hora_fin_asignada').val(horarioInfo.fin_asig || '');
-      $modal.find('#mph_vacantes').val(horarioInfo.vacantes !== undefined ? horarioInfo.vacantes : 1); // Usar valor o default
-      $modal.find('#mph_buffer_minutos_antes').val(horarioInfo.buffer_antes !== undefined ? horarioInfo.buffer_antes : 60);
-      $modal.find('#mph_buffer_minutos_despues').val(horarioInfo.buffer_despues !== undefined ? horarioInfo.buffer_despues : 60);
-      // Determinar si los buffers estaban linkeados (si son iguales)
-      $modal.find('#mph_buffer_linkeado').prop('checked', horarioInfo.buffer_antes === horarioInfo.buffer_despues);
-
-      // Poblar selects y seleccionar el valor guardado
-      (0,_modal_form_interaction__WEBPACK_IMPORTED_MODULE_2__.poblarSelectsAsignacion)($modal); // Poblar con opciones basadas en checkboxes marcados
-      $modal.find('#mph_programa_asignado').val(horarioInfo.prog_asig || ''); // Seleccionar valor
-      $modal.find('#mph_sede_asignada').val(horarioInfo.sede_asig || ''); // Seleccionar valor
-      $modal.find('#mph_rango_edad_asignado').val(horarioInfo.rango_asig || ''); // Seleccionar valor
-      console.log("Campos específicos pre-llenados.");
-
-      // 5. Mostrar sección de asignación específica (porque estamos editando una)
-      console.log("Mostrando sección de asignación para editar...");
-      var $seccionAsignacion = $modal.find('.mph-asignacion-especifica');
-      if ($seccionAsignacion.length) {
-        $seccionAsignacion.show();
-      }
-
-      // 6. Establecer ID Original
-      $modal.find('#mph_horario_id_editando').val(horarioInfo.horario_id || '');
-      console.log("ID de horario (" + (horarioInfo.horario_id || 'N/A') + ") establecido para edición.");
-
-      // 7. Abrir el modal
-      console.log("Abriendo modal para editar...");
-      (0,_modal_init__WEBPACK_IMPORTED_MODULE_1__.openModal)($modal);
-    } catch (e) {
-      console.error("Error al procesar horarioInfo o pre-llenar modal para Editar:", e);
-      alert("Error al preparar el formulario de edición.");
-    }
+      (0,_modal_init__WEBPACK_IMPORTED_MODULE_1__.resetModalForm)($modal); // Resetear primero (quita clases de modo)
+      prepareModalForEditVacantes($modal, horarioInfo); // Preparar (añade clase de modo)
+      (0,_modal_init__WEBPACK_IMPORTED_MODULE_1__.openModal)($modal); // Abrir
+    } catch (e) {/* ... manejo error ... */}
   });
 
   // --- Acción Vaciar */

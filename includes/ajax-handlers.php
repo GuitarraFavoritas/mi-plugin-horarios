@@ -24,6 +24,7 @@ if ( ! defined( 'ABSPATH' ) ) {
 function mph_register_ajax_actions() {
     add_action( 'wp_ajax_mph_guardar_horario_maestro', 'mph_ajax_guardar_horario_maestro_callback' );
     add_action( 'wp_ajax_mph_eliminar_horario', 'mph_ajax_eliminar_horario_callback' );
+    add_action( 'wp_ajax_mph_actualizar_vacantes', 'mph_ajax_actualizar_vacantes_callback' );
     add_action( 'wp_ajax_mph_vaciar_horario', 'mph_ajax_vaciar_horario_callback' );
 }
 add_action( 'init', 'mph_register_ajax_actions' ); // Registrar las acciones al inicio
@@ -42,7 +43,10 @@ function mph_ajax_guardar_horario_maestro_callback() {
 
     // --- 1. Verificación de Seguridad ---
     // Verificar Nonce (Enviado desde JS como 'nonce')
-    $nonce_action = 'mph_guardar_ajax'; // Acción simple usada en wp_nonce_field
+    //$nonce_action = 'mph_guardar_ajax'; // Acción simple usada en wp_nonce_field
+    //$nonce_name = 'mph_nonce_guardar'; // Nombre simple del campo en $_POST 
+
+    $nonce_action = 'mph_guardar_horario_action'; // Acción simple usada en wp_nonce_field
     $nonce_name = 'mph_nonce_guardar'; // Nombre simple del campo en $_POST
 
     // Verificar que el campo nonce fue enviado y es válido
@@ -400,4 +404,81 @@ function mph_ajax_vaciar_horario_callback() {
              'html_tabla' => $html_tabla
          ));
      }
+}
+
+/* Inicia Modificación: AÑADIR ESTA FUNCIÓN COMPLETA */
+/**
+ * Callback para la acción AJAX 'mph_actualizar_vacantes'.
+ * Actualiza únicamente el número de vacantes de un post 'Horario' existente.
+ */
+function mph_ajax_actualizar_vacantes_callback() {
+    $log_prefix = "AJAX mph_actualizar_vacantes:";
+    error_log("$log_prefix Petición AJAX recibida.");
+    error_log("$log_prefix Datos POST recibidos: " . print_r($_POST, true));
+
+    // 1. Verificación Nonce
+    $nonce_action = 'mph_actualizar_vacantes_action'; // Acción específica para este callback
+    $nonce_name = 'mph_nonce_actualizar_vacantes';    // Nombre del campo nonce específico
+    if ( ! isset( $_POST[$nonce_name] ) || ! wp_verify_nonce( sanitize_key($_POST[$nonce_name]), $nonce_action ) ) {
+        error_log("$log_prefix Error: Falló Nonce (Acción: $nonce_action). Recibido: " . sanitize_key($_POST[$nonce_name] ?? 'No recibido'));
+        wp_send_json_error( array( 'message' => __('Error de seguridad.', 'mi-plugin-horarios') ), 403 ); return;
+    }
+    error_log("$log_prefix Nonce verificado.");
+
+    // 2. Permisos
+    if ( ! current_user_can( 'edit_others_posts' ) ) { error_log("$log_prefix Error: Permisos insuficientes."); wp_send_json_error( /*...*/ 403); return; }
+     error_log("$log_prefix Permisos verificados.");
+
+     // 3. Obtener y Sanitizar Datos
+     $horario_id = isset($_POST['horario_id']) ? intval($_POST['horario_id']) : 0;
+     $vacantes = isset($_POST['vacantes']) ? intval($_POST['vacantes']) : -1; // Permitir 0
+     error_log("$log_prefix Datos recibidos - Horario ID: $horario_id, Vacantes: $vacantes");
+
+     if ( empty($horario_id) || $vacantes < 0 ) { // Vacantes debe ser >= 0
+         error_log("$log_prefix Error: Validación fallida - Faltan horario_id o vacantes inválidas ($vacantes).");
+         wp_send_json_error( array( 'message' => __('Datos insuficientes o inválidos.', 'mi-plugin-horarios') ), 400 ); return;
+     }
+
+     // 4. Comprobar Post
+     $post_a_actualizar = get_post($horario_id);
+     if (!$post_a_actualizar || $post_a_actualizar->post_type !== 'horario') {
+        error_log("$log_prefix Error: Post ID $horario_id no válido.");
+        wp_send_json_error( array( 'message' => __('El horario a actualizar no es válido.', 'mi-plugin-horarios') ), 404 ); return;
+     }
+     error_log("$log_prefix Post $horario_id encontrado y válido.");
+     $estado_actual = get_post_meta($horario_id, 'mph_estado', true);
+     error_log("$log_prefix Estado actual: $estado_actual");
+
+    // 5. Actualizar Meta y Estado
+    error_log("$log_prefix Actualizando meta 'mph_vacantes' a $vacantes...");
+    $meta_update_result = update_post_meta( $horario_id, 'mph_vacantes', $vacantes );
+    error_log("$log_prefix Resultado update_post_meta(mph_vacantes): " . ($meta_update_result !== false ? 'Éxito/Igual' : 'Fallo')); // Comparar con false
+
+    $nuevo_estado = $estado_actual;
+    $estado_update_result = true;
+    if ($vacantes === 0 && $estado_actual !== 'Lleno') {
+        $nuevo_estado = 'Lleno';
+        error_log("$log_prefix Actualizando meta 'mph_estado' a 'Lleno'...");
+        $estado_update_result = update_post_meta( $horario_id, 'mph_estado', 'Lleno' );
+        error_log("$log_prefix Resultado update_post_meta(mph_estado): " . ($estado_update_result !== false ? 'Éxito/Igual' : 'Fallo'));
+    } elseif ($vacantes > 0 && $estado_actual === 'Lleno') {
+        $nuevo_estado = 'Asignado';
+        error_log("$log_prefix Actualizando meta 'mph_estado' a 'Asignado'...");
+        $estado_update_result = update_post_meta( $horario_id, 'mph_estado', 'Asignado' );
+        error_log("$log_prefix Resultado update_post_meta(mph_estado): " . ($estado_update_result !== false ? 'Éxito/Igual' : 'Fallo'));
+    }
+
+    // 6. Enviar Respuesta
+    if ($meta_update_result !== false && $estado_update_result !== false) {
+        error_log("$log_prefix Éxito final: Vacantes actualizadas para Horario ID: $horario_id");
+         $html_tabla = '';
+         $maestro_id = get_post_meta($horario_id, 'maestro_id', true);
+         if ( $maestro_id && function_exists( 'mph_get_horarios_table_html' ) ) {
+             $html_tabla = mph_get_horarios_table_html( $maestro_id );
+         }
+         wp_send_json_success( array( 'message' => __('Vacantes actualizadas.', 'mi-plugin-horarios'), 'html_tabla' => $html_tabla ));
+    } else {
+         error_log("$log_prefix Fallo final: No se pudieron actualizar los metas para Horario ID: $horario_id");
+         wp_send_json_error( array( 'message' => __('Error al actualizar vacantes/estado.', 'mi-plugin-horarios') ), 500 );
+    }
 }

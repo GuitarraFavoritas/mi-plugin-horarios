@@ -71,9 +71,12 @@ function mph_render_horarios_meta_box_content( $post ) {
 function mph_render_horario_modal_html( $post ) {
     ?>
     <div id="mph-modal-horario" title="<?php esc_attr_e( 'Añadir/Editar Disponibilidad', 'mi-plugin-horarios' ); ?>" style="display: none;">
-        <form id="mph-form-horario"> <?php // <-- Formulario AQUI ?>
+        <form id="mph-form-horario"> 
 
-        <?php wp_nonce_field( 'mph_guardar_ajax', 'mph_nonce_guardar' ); // Acción más simple, nombre campo simple ?>
+            <?php // Nonce para Guardar/Reemplazar completo ?>
+            <?php  // wp_nonce_field( 'mph_guardar_ajax', 'mph_nonce_guardar' ); // Acción más simple, nombre campo simple ?>
+            <?php  wp_nonce_field( 'mph_guardar_horario_action', 'mph_nonce_guardar' ); ?>
+            <?php  wp_nonce_field( 'mph_actualizar_vacantes_action', 'mph_nonce_actualizar_vacantes' ); ?>
 
             <input type="hidden" id="mph_horario_id_editando" name="horario_id" value="">
             <input type="hidden" id="mph_maestro_id" name="maestro_id" value="<?php echo esc_attr( $post->ID ); ?>">
@@ -156,7 +159,7 @@ function mph_render_horario_modal_html( $post ) {
                          <option value=""><?php esc_html_e( '-- Seleccionar Rango --', 'mi-plugin-horarios' ); ?></option>
                      </select>
                  </p>
-                 <p>
+                 <p class="mph-vacantes-container">
                      <label for="mph_vacantes"><?php esc_html_e( 'Vacantes:', 'mi-plugin-horarios' ); ?></label>
                      <input type="number" id="mph_vacantes" name="vacantes" min="0" step="1" value="1" style="width: 60px;">
                  </p>

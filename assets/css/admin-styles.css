@@ -1,0 +1,36 @@
+/* assets/css/admin-styles.css */
+
+/* Estilos para el modal */
+.mph-jquery-ui-modal .ui-dialog-titlebar-close { /* Ocultar botón X si se prefiere Cancelar */
+    /* display: none; */
+}
+
+/* Control de visibilidad por modo */
+
+/* Modo por defecto (Añadir/Asignar/Editar Disp - Sección Asig oculta) */
+#mph-modal-horario:not([class*="mph-modal-mode-"]) #mph-editar-info,
+#mph-modal-horario:not([class*="mph-modal-mode-"]) .mph-modal-seccion.mph-asignacion-especifica {
+    display: none;
+}
+#mph-modal-horario:not([class*="mph-modal-mode-"]) .mph-modal-seccion.mph-disponibilidad-general,
+#mph-modal-horario:not([class*="mph-modal-mode-"]) #mph-mostrar-asignacion,
+#mph-modal-horario:not([class*="mph-modal-mode-"]) .mph-modal-acciones {
+    display: block; /* Asegurar que lo general y acciones se vean */
+}
+
+
+/* Modo Editar Vacantes */
+.mph-modal-mode-edit-vacantes .mph-modal-seccion.mph-disponibilidad-general,
+.mph-modal-mode-edit-vacantes .mph-modal-seccion.mph-asignacion-especifica > *:not(.mph-vacantes-container), /* Oculta hijos excepto vacantes */
+.mph-modal-mode-edit-vacantes #mph-mostrar-asignacion {
+    display: none;
+}
+/* Asegurar que lo necesario SÍ se vea */
+.mph-modal-mode-edit-vacantes #mph-editar-info,
+.mph-modal-mode-edit-vacantes .mph-modal-seccion.mph-asignacion-especifica, /* Mostrar la sección */
+.mph-modal-mode-edit-vacantes .mph-vacantes-container, /* Mostrar contenedor vacantes */
+.mph-modal-mode-edit-vacantes .mph-modal-acciones {
+    display: block !important;
+}
+
+/* Podríamos añadir reglas para mph-modal-mode-edit-disp y mph-modal-mode-assign si fuera necesario */

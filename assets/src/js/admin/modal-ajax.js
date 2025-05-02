@@ -8,13 +8,11 @@ import { closeModal } from './modal-init';
  * @param {jQuery} $modal - El objeto jQuery del elemento modal.
  */
 export function initAjaxSubmit($modal) {
-    /* Inicia Modificación: Corregir log y asegurar $modal es válido */
     console.log(`Inicializando manejador CLICK para #mph-guardar-horario...`);
      if (!$modal || !$modal.length || typeof $modal.find !== 'function') {
          console.error("initAjaxSubmit: No se recibió el objeto $modal válido.");
          return;
       }
-    /* Finaliza Modificación */
 
       const $spinnerModal = $modal.find('.mph-modal-acciones .spinner');
       const $feedbackModal = $modal.find('.mph-modal-feedback');
@@ -34,11 +32,43 @@ export function initAjaxSubmit($modal) {
              return;
          }
 
-        console.log('Llamando a validarFormulario...');
-        if (!validarFormulario($form)) {
-            console.log('validarFormulario devolvió false. Envío detenido.');
-            return;
-        }
+
+
+
+         
+
+        const actionMode = $button.attr('data-action-mode') || 'save_full';
+         console.log("Modo de Acción:", actionMode);
+
+         // --- Validación ---
+         let isValid = false;
+         /* Inicia Modificación: Asegurar que la validación correcta se llama */
+         if (actionMode === 'update_vacantes') {
+             console.log("Validando solo vacantes...");
+             const $vacantesInput = $form.find('#mph_vacantes'); // Buscar input
+             const vacantesVal = parseInt($vacantesInput.val(), 10);
+             // Validar si es número y no negativo
+             if ( $vacantesInput.length && !isNaN(vacantesVal) && vacantesVal >= 0 ) {
+                 isValid = true;
+                 if ($errorModal.length) $errorModal.hide().text(''); // Limpiar error si es válido
+             } else {
+                 isValid = false;
+                 if ($errorModal.length) $errorModal.text(window.mph_admin_obj?.i18n?.error_vacantes_negativas || 'Las vacantes deben ser un número positivo.').show();
+             }
+             console.log("Resultado Validación Vacantes:", isValid);
+         } else { // save_full
+             console.log('Llamando a validarFormulario (modo save_full)...');
+             isValid = validarFormulario($form); // Llama a la función completa
+             if (!isValid) console.log('validarFormulario (save_full) devolvió false.');
+         }
+
+
+
+
+
+
+         if (!isValid) { return; } // Detener si no es válido
+
         console.log('Validación pasada. Procediendo con AJAX...');
 
         // Feedback visual
@@ -59,82 +89,99 @@ export function initAjaxSubmit($modal) {
             return; // Detener si falta
         }
 
-        // Si llegamos aquí, el objeto y ajax_url son válidos.
-        const ajax_url = mph_admin_obj.ajax_url;
-        // const nonce = mph_admin_obj.nonce; // Ya no necesitamos el nonce de mph_admin_obj
-        const i18n = mph_admin_obj.i18n || {};
+        // --- Preparar Datos AJAX según el modo ---
+        let dataToSend = '';
+        let ajaxAction = ''; // Variable para la acción
+
+        let nonceValue = '';
+        let nonceFieldName = '';    
+
+        // const nonceFieldName = 'mph_nonce_guardar';
+        // const $nonceField = $form.find('input[name="' + nonceFieldName + '"]');
+        // let nonceValue = $nonceField.length ? $nonceField.val() : '';
+        // if (!nonceValue) { /* ... error nonce no encontrado ... */ return; }
 
 
+        
 
 
-
-
-
-        // Nombre del campo nonce (debe coincidir con wp_nonce_field en PHP)
-        const nonceFieldName = 'mph_nonce_guardar'; // Nuevo nombre del campo
+        if (actionMode === 'update_vacantes') {
+            ajaxAction = 'mph_actualizar_vacantes';
+            nonceFieldName = 'mph_nonce_actualizar_vacantes'; // Nombre del nuevo nonce field
             const $nonceField = $form.find('input[name="' + nonceFieldName + '"]');
-            let nonceValue = '';
+            if ($nonceField.length) { nonceValue = $nonceField.val(); }
+             else { console.error("Campo Nonce para Actualizar Vacantes no encontrado!"); /* ... error ... */ return; }
 
-            if ($nonceField.length) {
-                nonceValue = $nonceField.val();
-                console.log(`Valor del campo nonce (${nonceFieldName}) leído del DOM:`, nonceValue);
-            } else {
-                console.error(`¡Error crítico! No se encontró el campo nonce "${nonceFieldName}" en el formulario.`);
-                if ($errorModal.length) $errorModal.text("Error de seguridad interno (Falta campo Nonce).").show();
-                $button.prop('disabled', false); if ($spinnerModal.length) $spinnerModal.removeClass('is-active');
-                return;
-            }
-
-            // Construir dataToSend: acción + formData (que ya incluye nonce)
-            // NO necesitamos añadir el nonce explícitamente si está en formData
-            const dataToSend = formData + '&action=mph_guardar_horario_maestro';
-            console.log('Datos COMPLETOS a enviar (formData incluye nonce):', dataToSend);
+            const horarioId = $form.find('#mph_horario_id_editando').val();
+            const vacantesVal = $form.find('#mph_vacantes').val();
+            dataToSend = { // Construir objeto
+                action: ajaxAction,
+                horario_id: horarioId,
+                vacantes: vacantesVal,
+                [nonceFieldName]: nonceValue // Incluir nonce específico
+            };
+             console.log('Datos a enviar (update_vacantes):', dataToSend);
 
 
+        } else { // save_full
+             ajaxAction = 'mph_guardar_horario_maestro';
+             nonceFieldName = 'mph_nonce_guardar'; // Nombre del nonce field original
+             const $nonceField = $form.find('input[name="' + nonceFieldName + '"]');
+             if ($nonceField.length) { nonceValue = $nonceField.val(); }
+              else { console.error("Campo Nonce para Guardar no encontrado!"); /* ... error ... */ return; }
 
-
-
+             const formData = $form.serialize(); // Obtener todos los datos
+             // Crear dataToSend como objeto también para consistencia (opcional)
+             // O seguir con string: dataToSend = formData + '&action=' + ajaxAction;
+             // Si usamos objeto, necesitamos parsear formData o añadir campos manualmente
+             // Mantengamos string por ahora para save_full:
+             dataToSend = formData + '&action=' + ajaxAction; // formData ya incluye nonce guardar
+             console.log('Datos COMPLETOS a enviar (save_full):', dataToSend);
+        }
 
 
 
 
         
 
-        // Petición AJAX
-        $.post(ajax_url, dataToSend)
-            .done(function (response) {
-               if (response.success) {
-                    console.log("Respuesta AJAX exitosa:", response);
-                    if ($feedbackModal.length) $feedbackModal.text(i18n.horario_guardado || '¡Guardado!').show();
-                    if (response.data && response.data.html_tabla && $tablaContainer.length) {
-                        console.log("Actualizando tabla de horarios...");
-                        $tablaContainer.html(response.data.html_tabla);
-                    } else {
-                         console.warn("Respuesta exitosa pero no se encontró HTML de tabla para actualizar.");
-                    }
-                    setTimeout(function () { closeModal($modal); }, 1500);
+        // --- Enviar Petición AJAX ---
+        if (!window.mph_admin_obj || !window.mph_admin_obj.ajax_url) { /*...*/ return; }
+        const ajax_url = window.mph_admin_obj.ajax_url;
+        const i18n = window.mph_admin_obj.i18n || {};     
+
+    // Petición AJAX
+    $.post(ajax_url, dataToSend)
+        .done(function (response) {
+           if (response.success) {
+                console.log("Respuesta AJAX exitosa:", response);
+                if ($feedbackModal.length) $feedbackModal.text(i18n.horario_guardado || '¡Guardado!').show();
+                if (response.data && response.data.html_tabla && $tablaContainer.length) {
+                    console.log("Actualizando tabla de horarios...");
+                    $tablaContainer.html(response.data.html_tabla);
                 } else {
-                    console.error('Error servidor (success=false):', response.data?.message);
-                    if ($errorModal.length) $errorModal.text(response.data?.message || i18n.error_general || 'Error desconocido.').show();
+                     console.warn("Respuesta exitosa pero no se encontró HTML de tabla para actualizar.");
                 }
-            })
-            .fail(function (jqXHR, textStatus, errorThrown) {
-               console.error("Error AJAX:", textStatus, errorThrown, jqXHR.responseText);
-               // Mostrar mensaje de error específico si es 403 (Nonce)
-                if (jqXHR.status === 403) {
-                     if ($errorModal.length) $errorModal.text(i18n.error_seguridad || 'Error de seguridad. Intente recargar la página.').show();
-                } else {
-                    if ($errorModal.length) $errorModal.text(i18n.error_general || 'Error de comunicación.').show();
-                }
-            })
-            .always(function () {
-                console.log("Petición AJAX completada (always).");
-                if ($spinnerModal.length) $spinnerModal.removeClass('is-active');
-                $button.prop('disabled', false);
-            });
+                setTimeout(function () { closeModal($modal); }, 1500);
+            } else {
+                console.error('Error servidor (success=false):', response.data?.message);
+                if ($errorModal.length) $errorModal.text(response.data?.message || i18n.error_general || 'Error desconocido.').show();
+            }
+        })
+        .fail(function (jqXHR, textStatus, errorThrown) {
+           console.error("Error AJAX:", textStatus, errorThrown, jqXHR.responseText);
+           // Mostrar mensaje de error específico si es 403 (Nonce)
+            if (jqXHR.status === 403) {
+                 if ($errorModal.length) $errorModal.text(i18n.error_seguridad || 'Error de seguridad. Intente recargar la página.').show();
+            } else {
+                if ($errorModal.length) $errorModal.text(i18n.error_general || 'Error de comunicación.').show();
+            }
+        })
+        .always(function () {
+            console.log("Petición AJAX completada (always).");
+            if ($spinnerModal.length) $spinnerModal.removeClass('is-active');
+            $button.prop('disabled', false);
+        });
     }); // Fin click #mph-guardar-horario
 
-     /* Inicia Modificación: Corregir log final */
     console.log(`Manejador CLICK para #mph-guardar-horario inicializado.`);
-    /* Finaliza Modificación */
 } // Fin initAjaxSubmit

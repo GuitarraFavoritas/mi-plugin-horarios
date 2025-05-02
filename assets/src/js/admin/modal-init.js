@@ -86,24 +86,28 @@ export function openModal(modalSelector) {
  */
 export function resetModalForm($dialogElement) {
     console.log('Intentando resetear formulario...');
-     if (!$dialogElement || !$dialogElement.length) {
-         console.error("resetModalForm: No se recibió $dialogElement.");
-         return;
-     }
+     if (!$dialogElement || !$dialogElement.length) {console.error("resetModalForm: No se recibió $dialogElement."); return; }
     const $form = $dialogElement.find('form#mph-form-horario');
     if (!$form.length) {
         console.error('Error en resetModalForm: No se encontró form#mph-form-horario dentro del contexto.');
         // Loggear contenido si falla
         console.log("Contenido HTML dentro del contexto:", $dialogElement.html());
         console.log("Hijos dentro del contexto:", $dialogElement.children());
-        return;
-    }
+        return; }
     console.log('Formulario encontrado en resetModalForm. Reseteando...');
     try {
         $form[0].reset(); // Reset nativo
+        $form.find('#mph_horario_id_editando').val('');
 
-        // Reset específico para nuestros campos (usando selectores buscados DENTRO del form o globales)
-        $form.find('#mph_horario_id_editando').val(''); // Limpiar ID
+        // --- Restaurar Visibilidad ---
+
+        $dialogElement.removeClass('mph-modal-mode-edit-vacantes mph-modal-mode-edit-disp mph-modal-mode-assign'); // Quitar clases de modo
+
+       $dialogElement.find('#mph-editar-info').hide().empty();
+        $form.find('.mph-modal-seccion.mph-disponibilidad-general').show(); // Mostrar sección general
+        $form.find('.mph-modal-seccion.mph-asignacion-especifica').hide(); // Ocultar sección asignación
+        $form.find('#mph-mostrar-asignacion').show(); // Mostrar botón toggle
+        /* Finaliza Modificación */
 
         // Reset checkboxes comunes (requiere mph_admin_obj disponible globalmente o pasado)
         if (window.mph_admin_obj) {
@@ -128,16 +132,23 @@ export function resetModalForm($dialogElement) {
 
         // Limpiar selects y ocultar sección
         $form.find('#mph_programa_asignado, #mph_sede_asignada, #mph_rango_edad_asignado').empty().append($('<option>', { value: '', text: '-- Seleccionar --' })); // Texto genérico
-        $form.find('.mph-asignacion-especifica').hide();
 
         // Resetear errores y valores por defecto
-        $dialogElement.find('.mph-error-hora, .mph-error-duplicado, .mph-error-hora-asignada').hide(); // Buscar errores dentro del diálogo
-        $form.find('#mph_vacantes').val(1);
+        $dialogElement.find('.mph-error-hora, .mph-error-duplicado, .mph-error-hora-asignada').hide();
+        $dialogElement.find('.mph-modal-feedback, .mph-modal-error').hide().text('');
+        $form.find('#mph_vacantes').val(1); // Restaurar valor vacantes
         $form.find('#mph_buffer_minutos_antes').val(60);
         $form.find('#mph_buffer_minutos_despues').val(60);
         $form.find('#mph_buffer_linkeado').prop('checked', true);
 
-    } catch (e) {
-         console.error("Error durante resetModalForm:", e);
-    }
-}
+        // Restaurar Botón Guardar
+        const $btnGuardar = $form.find('#mph-guardar-horario');
+        if ($btnGuardar.length) {
+            const textoOriginal = window.mph_admin_obj?.i18n?.guardar_horario || 'Guardar Disponibilidad/Asignación';
+            $btnGuardar.text(textoOriginal);
+            $btnGuardar.removeAttr('data-action-mode'); // Limpiar modo
+        }
+         console.log("Visibilidad y botón guardar restaurados a default.");
+
+    } catch (e) { console.error("Error durante resetModalForm:", e); }
+} // Fin resetModalForm

@@ -176,7 +176,37 @@ function mph_get_horarios_table_html( $maestro_id ) {
 
                 // Botón Editar (para Asignado, Lleno) -> Solo Vacantes
                 if (in_array($estado, ['Asignado', 'Lleno'])) {
-                     $data_editar_vacantes = array( /* ... datos como antes, incluyendo admisibles ... */ );
+
+
+                    // Pasar todos los datos guardados para pre-llenar el modal de edición
+                     $prog_admisibles_ids = isset($meta['mph_programas_admisibles'][0]) ? explode(',', $meta['mph_programas_admisibles'][0]) : array();
+                     $sede_admisibles_ids = isset($meta['mph_sedes_admisibles'][0]) ? explode(',', $meta['mph_sedes_admisibles'][0]) : array();
+                     $rango_admisibles_ids = isset($meta['mph_rangos_admisibles'][0]) ? explode(',', $meta['mph_rangos_admisibles'][0]) : array(); // Ojo slug tax
+
+
+
+
+                     $data_editar_vacantes = array(
+                        // ¿ESTÁ $horario_id AQUÍ? ($horario_id se define al principio del bucle foreach)
+                        'horario_id' => $horario_id, // <-- ASEGÚRATE DE QUE ESTA LÍNEA EXISTE Y ES CORRECTA
+                        'dia' => $num_dia,
+                        //'inicio_gen' => '', // No las necesitamos para editar vacantes
+                        //'fin_gen' => '',
+                        'prog_admisibles' => array_map('intval', $prog_admisibles_ids), // Las pasamos por si la info adicional las usa
+                        'sede_admisibles' => array_map('intval', $sede_admisibles_ids),
+                        'rango_admisibles' => array_map('intval', $rango_admisibles_ids),
+                        'inicio_asig' => $hora_inicio, // Para mostrar info
+                        'fin_asig' => $hora_fin,       // Para mostrar info
+                        'prog_asig' => isset($meta['mph_programa_asignado'][0]) ? intval($meta['mph_programa_asignado'][0]) : 0, // Para mostrar info
+                        'sede_asig' => isset($meta['mph_sede_asignada'][0]) ? intval($meta['mph_sede_asignada'][0]) : 0,       // Para mostrar info
+                        'rango_asig' => isset($meta['mph_rango_de_edad_asignado'][0]) ? intval($meta['mph_rango_de_edad_asignado'][0]) : 0, // Para mostrar info
+                        'vacantes' => $vacantes, // El valor a editar
+                        'buffer_antes' => isset($meta['mph_buffer_antes'][0]) ? intval($meta['mph_buffer_antes'][0]) : 0, // Para info o lógica futura
+                        'buffer_despues' => isset($meta['mph_buffer_despues'][0]) ? intval($meta['mph_buffer_despues'][0]) : 0, // Para info o lógica futura
+                    );
+
+
+                     
                      $data_editar_vacantes_json = htmlspecialchars(json_encode($data_editar_vacantes), ENT_QUOTES, 'UTF-8');
                      $acciones_col .= ' | <button type="button" class="button button-link mph-accion-horario mph-accion-editar-vacantes" data-horario-info="' . $data_editar_vacantes_json . '">' . esc_html__('Editar Vacantes', 'mi-plugin-horarios') . '</button>'; // Cambiar clase y texto
                 }
