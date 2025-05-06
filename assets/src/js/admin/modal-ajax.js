@@ -30,15 +30,10 @@ export function initAjaxSubmit($modal) {
              console.error("Error en click Guardar: No se encontró el formulario.");
              alert("Error interno del formulario.");
              return;
-         }
-
-
-
-
-         
+         }         
 
         const actionMode = $button.attr('data-action-mode') || 'save_full';
-         console.log("Modo de Acción:", actionMode);
+         console.log("Modo de Acción (leído del botón):", actionMode);
 
          // --- Validación ---
          let isValid = false;
@@ -61,11 +56,6 @@ export function initAjaxSubmit($modal) {
              isValid = validarFormulario($form); // Llama a la función completa
              if (!isValid) console.log('validarFormulario (save_full) devolvió false.');
          }
-
-
-
-
-
 
          if (!isValid) { return; } // Detener si no es válido
 
@@ -95,16 +85,6 @@ export function initAjaxSubmit($modal) {
 
         let nonceValue = '';
         let nonceFieldName = '';    
-
-        // const nonceFieldName = 'mph_nonce_guardar';
-        // const $nonceField = $form.find('input[name="' + nonceFieldName + '"]');
-        // let nonceValue = $nonceField.length ? $nonceField.val() : '';
-        // if (!nonceValue) { /* ... error nonce no encontrado ... */ return; }
-
-
-        
-
-
         if (actionMode === 'update_vacantes') {
             ajaxAction = 'mph_actualizar_vacantes';
             nonceFieldName = 'mph_nonce_actualizar_vacantes'; // Nombre del nuevo nonce field
@@ -124,6 +104,7 @@ export function initAjaxSubmit($modal) {
 
 
         } else { // save_full
+            console.log("Preparando datos para guardar completo/asignar a existente...");
              ajaxAction = 'mph_guardar_horario_maestro';
              nonceFieldName = 'mph_nonce_guardar'; // Nombre del nonce field original
              const $nonceField = $form.find('input[name="' + nonceFieldName + '"]');
@@ -137,12 +118,7 @@ export function initAjaxSubmit($modal) {
              // Mantengamos string por ahora para save_full:
              dataToSend = formData + '&action=' + ajaxAction; // formData ya incluye nonce guardar
              console.log('Datos COMPLETOS a enviar (save_full):', dataToSend);
-        }
-
-
-
-
-        
+        }        
 
         // --- Enviar Petición AJAX ---
         if (!window.mph_admin_obj || !window.mph_admin_obj.ajax_url) { /*...*/ return; }

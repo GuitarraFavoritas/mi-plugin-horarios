@@ -33,4 +33,24 @@
     display: block !important;
 }
 
-/* Podríamos añadir reglas para mph-modal-mode-edit-disp y mph-modal-mode-assign si fuera necesario */
+/* Modo Asignar a Existente */
+.mph-modal-mode-assign .mph-modal-seccion.mph-disponibilidad-general,
+.mph-modal-mode-assign #mph-mostrar-asignacion {
+    display: none !important; /* Ocultar sección general y botón de toggle */
+}
+
+.mph-modal-mode-assign #mph-editar-info { /* Para mostrar día/hora del bloque original */
+    display: block !important;
+    margin-bottom: 15px;
+    padding-bottom: 10px;
+    border-bottom: 1px solid #eee;
+}
+
+.mph-modal-mode-assign .mph-modal-seccion.mph-asignacion-especifica {
+    display: block !important; /* Asegurar que la sección de asignación se vea */
+    border-top: none !important; /* Quitar borde superior si lo tenía */
+    margin-top: 0 !important; /* Quitar margen superior si lo tenía */
+}
+.mph-modal-mode-assign .mph-modal-acciones {
+    display: block !important;
+}

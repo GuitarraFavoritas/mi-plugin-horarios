@@ -51,7 +51,7 @@ function initAjaxSubmit($modal) {
       return;
     }
     var actionMode = $button.attr('data-action-mode') || 'save_full';
-    console.log("Modo de Acción:", actionMode);
+    console.log("Modo de Acción (leído del botón):", actionMode);
 
     // --- Validación ---
     var isValid = false;
@@ -105,12 +105,6 @@ function initAjaxSubmit($modal) {
 
     var nonceValue = '';
     var nonceFieldName = '';
-
-    // const nonceFieldName = 'mph_nonce_guardar';
-    // const $nonceField = $form.find('input[name="' + nonceFieldName + '"]');
-    // let nonceValue = $nonceField.length ? $nonceField.val() : '';
-    // if (!nonceValue) { /* ... error nonce no encontrado ... */ return; }
-
     if (actionMode === 'update_vacantes') {
       ajaxAction = 'mph_actualizar_vacantes';
       nonceFieldName = 'mph_nonce_actualizar_vacantes'; // Nombre del nuevo nonce field
@@ -132,6 +126,7 @@ function initAjaxSubmit($modal) {
       console.log('Datos a enviar (update_vacantes):', dataToSend);
     } else {
       // save_full
+      console.log("Preparando datos para guardar completo/asignar a existente...");
       ajaxAction = 'mph_guardar_horario_maestro';
       nonceFieldName = 'mph_nonce_guardar'; // Nombre del nonce field original
       var _$nonceField = $form.find('input[name="' + nonceFieldName + '"]');
@@ -649,16 +644,16 @@ __webpack_require__.r(__webpack_exports__);
 // assets/src/js/admin/modal-validation.js
 
 
-// Selectores globales (o podrían pasarse a la función)
-var $modal = jquery__WEBPACK_IMPORTED_MODULE_0___default()('#mph-modal-horario');
-var $errorModal = jquery__WEBPACK_IMPORTED_MODULE_0___default()('#mph-modal-horario .mph-modal-error');
+// Selectores globales (asumiendo que se definen en main.js y están disponibles en window o pasados)
+// O búscalos dentro de $form o $modal si es más seguro
 var $diaSemana = jquery__WEBPACK_IMPORTED_MODULE_0___default()('#mph_dia_semana');
 var $horaInicioGeneral = jquery__WEBPACK_IMPORTED_MODULE_0___default()('#mph_hora_inicio_general');
 var $horaFinGeneral = jquery__WEBPACK_IMPORTED_MODULE_0___default()('#mph_hora_fin_general');
 var $programasAdmisiblesContainer = jquery__WEBPACK_IMPORTED_MODULE_0___default()('#mph-programas-admisibles-container');
 var $sedesAdmisiblesContainer = jquery__WEBPACK_IMPORTED_MODULE_0___default()('#mph-sedes-admisibles-container');
 var $rangosAdmisiblesContainer = jquery__WEBPACK_IMPORTED_MODULE_0___default()('#mph-rangos-admisibles-container');
-var $seccionAsignacion = jquery__WEBPACK_IMPORTED_MODULE_0___default()('#mph-modal-horario .mph-asignacion-especifica'); // Buscar dentro de modal por seguridad
+// Selectores para la sección de asignación (pueden ser globales o buscados dentro de $form)
+var $seccionAsignacion = jquery__WEBPACK_IMPORTED_MODULE_0___default()('#mph-modal-horario .mph-asignacion-especifica'); // Más específico
 var $horaInicioAsignada = jquery__WEBPACK_IMPORTED_MODULE_0___default()('#mph_hora_inicio_asignada');
 var $horaFinAsignada = jquery__WEBPACK_IMPORTED_MODULE_0___default()('#mph_hora_fin_asignada');
 var $selectProgramaAsignado = jquery__WEBPACK_IMPORTED_MODULE_0___default()('#mph_programa_asignado');
@@ -667,118 +662,115 @@ var $selectRangoAsignado = jquery__WEBPACK_IMPORTED_MODULE_0___default()('#mph_r
 var $vacantes = jquery__WEBPACK_IMPORTED_MODULE_0___default()('#mph_vacantes');
 var $bufferAntes = jquery__WEBPACK_IMPORTED_MODULE_0___default()('#mph_buffer_minutos_antes');
 var $bufferDespues = jquery__WEBPACK_IMPORTED_MODULE_0___default()('#mph_buffer_minutos_despues');
-
-/**
- * Valida los campos del formulario del modal antes de enviar.
- * @param {jQuery} $form - El objeto jQuery del formulario a validar.
- * @returns {boolean} True si es válido, False si no.
- */
 function validarFormulario($form) {
-  var _window$mph_admin_obj;
+  // Acepta $form como argumento
   console.log('--- Iniciando validarFormulario ---');
   if (!$form || !$form.length) {
     console.error('Error en validarFormulario: No se recibió un objeto de formulario válido.');
     return false;
   }
   var isValid = true;
-  // Asegurarse que $errorModal existe
-  if (!$errorModal.length) {
-    console.error("Error en validarFormulario: Contenedor de errores no encontrado.");
-    // Quizás mostrar un alert genérico si falla la UI de errores
-    // alert("Error interno al validar.");
-    // return false; // O intentar continuar sin UI de error
-  } else {
-    $errorModal.hide().empty(); // Limpiar errores previos y ocultar
-  }
+  var $modal = $form.closest('#mph-modal-horario'); // Obtener el modal desde el form
+  var $errorModal = $modal.find('.mph-modal-error');
+  if ($errorModal.length) $errorModal.hide().empty();
 
-  // --- Validación Sección General ---
-  if (!$diaSemana.val()) {
-    $errorModal.append('<p>Seleccione un día.</p>');
-    isValid = false;
-  }
-  var horaInicioGen = $horaInicioGeneral.val();
-  var horaFinGen = $horaFinGeneral.val();
-  if (!horaInicioGen || !horaFinGen) {
-    $errorModal.append('<p>Ingrese horas generales.</p>');
-    isValid = false;
-  } else if (horaFinGen <= horaInicioGen) {
-    $modal.find('.mph-error-hora').show();
-    isValid = false;
-  } // Mostrar error junto al campo
-  else {
-    $modal.find('.mph-error-hora').hide();
-  }
-  var i18n = ((_window$mph_admin_obj = window.mph_admin_obj) === null || _window$mph_admin_obj === void 0 ? void 0 : _window$mph_admin_obj.i18n) || {}; // Acceso seguro a i18n
+  // Obtener el modo del botón guardar que está DENTRO del form
+  var $btnGuardar = $form.find('#mph-guardar-horario');
+  var currentMode = $btnGuardar.attr('data-action-mode') || 'save_full'; // 'save_full' es el default si no hay attr
+  console.log("validarFormulario - Modo de acción detectado:", currentMode);
 
-  if ($programasAdmisiblesContainer.find('input:checked').length === 0) {
-    $errorModal.append('<p>' + (i18n.error_seleccionar_programa || 'Debe seleccionar al menos un programa admisible.') + '</p>');
-    isValid = false;
-  }
-  if ($sedesAdmisiblesContainer.find('input:checked').length === 0) {
-    $errorModal.append('<p>' + (i18n.error_seleccionar_sede || 'Debe seleccionar al menos una sede admisible.') + '</p>');
-    isValid = false;
-  }
-  if ($rangosAdmisiblesContainer.find('input:checked').length === 0) {
-    $errorModal.append('<p>' + (i18n.error_seleccionar_rango || 'Debe seleccionar al menos un rango de edad admisible.') + '</p>');
-    isValid = false;
-  }
-
-  // --- Validación Sección Asignación (si visible) ---
-  if ($seccionAsignacion.is(':visible')) {
-    console.log("Validando sección de asignación...");
-    var horaInicioAsig = $horaInicioAsignada.val();
-    var horaFinAsig = $horaFinAsignada.val();
-    var $errorHoraAsignada = $modal.find('.mph-error-hora-asignada'); // Selector error específico
-
-    if (!horaInicioAsig || !horaFinAsig) {
-      $errorModal.append('<p>' + (i18n.error_faltan_horas_asignadas || 'Faltan horas de asignación.') + '</p>');
+  // --- Validación Sección General (SOLO para modo save_full) ---
+  if (currentMode === 'save_full') {
+    var _window$mph_admin_obj;
+    console.log("Validando sección general para modo save_full...");
+    if (!$diaSemana.val()) {
+      $errorModal.append('<p>Seleccione un día.</p>');
+      isValid = false;
+    }
+    var horaInicioGenVal = $horaInicioGeneral.val(); // Usar selectores globales
+    var horaFinGenVal = $horaFinGeneral.val();
+    if (!horaInicioGenVal || !horaFinGenVal) {
+      $errorModal.append('<p>Ingrese horas generales.</p>');
+      isValid = false;
+    } else if (horaFinGenVal <= horaInicioGenVal) {
+      $modal.find('.mph-error-hora').show();
       isValid = false;
     } else {
-      if (horaFinAsig <= horaInicioAsig) {
-        $errorHoraAsignada.text(i18n.error_hora_asignada_invalida || 'Hora fin asignada debe ser posterior a inicio.').show();
+      $modal.find('.mph-error-hora').hide();
+    }
+    var i18n_val = ((_window$mph_admin_obj = window.mph_admin_obj) === null || _window$mph_admin_obj === void 0 ? void 0 : _window$mph_admin_obj.i18n) || {};
+    if ($programasAdmisiblesContainer.find('input:checked').length === 0) {
+      $errorModal.append('<p>' + (i18n_val.error_seleccionar_programa || 'Prog.') + '</p>');
+      isValid = false;
+    }
+    if ($sedesAdmisiblesContainer.find('input:checked').length === 0) {
+      $errorModal.append('<p>' + (i18n_val.error_seleccionar_sede || 'Sede.') + '</p>');
+      isValid = false;
+    }
+    if ($rangosAdmisiblesContainer.find('input:checked').length === 0) {
+      $errorModal.append('<p>' + (i18n_val.error_seleccionar_rango || 'Rango.') + '</p>');
+      isValid = false;
+    }
+  }
+
+  // --- Validación Sección Asignación (SOLO si está visible Y no es 'edit_vacantes') ---
+  // O si el modo es 'assign_to_existing' (porque la sección se muestra directamente)
+  var seccionAsignacionVisible = $seccionAsignacion.is(':visible'); // Usar selector global
+  if (seccionAsignacionVisible && currentMode !== 'update_vacantes' || currentMode === 'assign_to_existing') {
+    var _window$mph_admin_obj2;
+    console.log("Validando sección de asignación...");
+    var horaInicioAsigVal = $horaInicioAsignada.val();
+    var horaFinAsigVal = $horaFinAsignada.val();
+    var horaInicioGenValParaComparar = currentMode === 'assign_to_existing' ? $form.find('#mph_hora_inicio_general').val() : $horaInicioGeneral.val();
+    var horaFinGenValParaComparar = currentMode === 'assign_to_existing' ? $form.find('#mph_hora_fin_general').val() : $horaFinGeneral.val();
+    var $errorHoraAsignada = $modal.find('.mph-error-hora-asignada');
+    var i18n_asig = ((_window$mph_admin_obj2 = window.mph_admin_obj) === null || _window$mph_admin_obj2 === void 0 ? void 0 : _window$mph_admin_obj2.i18n) || {};
+    if (!horaInicioAsigVal || !horaFinAsigVal) {
+      $errorModal.append('<p>' + (i18n_asig.error_faltan_horas_asignadas || 'Faltan horas.') + '</p>');
+      isValid = false;
+    } else {
+      if (horaFinAsigVal <= horaInicioAsigVal) {
+        $errorHoraAsignada.text(i18n_asig.error_hora_asignada_invalida || 'Fin < Inicio Asig.').show();
         isValid = false;
-      } else if (horaInicioGen && horaFinGen && (horaInicioAsig < horaInicioGen || horaFinAsig > horaFinGen)) {
-        $errorHoraAsignada.text(i18n.error_hora_asignada_rango || 'Horas asignadas fuera del rango general.').show();
+      }
+      // Validar contra las horas GENERALES del contexto actual
+      else if (horaInicioGenValParaComparar && horaFinGenValParaComparar && (horaInicioAsigVal < horaInicioGenValParaComparar || horaFinAsigVal > horaFinGenValParaComparar)) {
+        $errorHoraAsignada.text(i18n_asig.error_hora_asignada_rango || 'Asig. fuera rango Gral.').show();
         isValid = false;
       } else {
         $errorHoraAsignada.hide();
       }
     }
     if (!$selectProgramaAsignado.val()) {
-      $errorModal.append('<p>' + (i18n.error_seleccionar_programa_asig || 'Debe seleccionar un programa para la asignación.') + '</p>');
+      $errorModal.append('<p>' + (i18n_asig.error_seleccionar_programa_asig || 'Prog Asig.') + '</p>');
       isValid = false;
     }
     if (!$selectSedeAsignada.val()) {
-      $errorModal.append('<p>' + (i18n.error_seleccionar_sede_asig || 'Debe seleccionar una sede para la asignación.') + '</p>');
+      $errorModal.append('<p>' + (i18n_asig.error_seleccionar_sede_asig || 'Sede Asig.') + '</p>');
       isValid = false;
     }
     if (!$selectRangoAsignado.val()) {
-      $errorModal.append('<p>' + (i18n.error_seleccionar_rango_asig || 'Debe seleccionar un rango de edad para la asignación.') + '</p>');
+      $errorModal.append('<p>' + (i18n_asig.error_seleccionar_rango_asig || 'Rango Asig.') + '</p>');
       isValid = false;
     }
+
+    // La validación de vacantes y buffers se hace en el modo 'update_vacantes' y también aquí para 'save_full' y 'assign_to_existing'
     if (parseInt($vacantes.val(), 10) < 0) {
-      $errorModal.append('<p>' + (i18n.error_vacantes_negativas || 'Las vacantes no pueden ser negativas.') + '</p>');
+      $errorModal.append('<p>' + (i18n_asig.error_vacantes_negativas || 'Vacantes < 0.') + '</p>');
       isValid = false;
     }
     var bufferAntesVal = parseInt($bufferAntes.val(), 10);
     var bufferDespuesVal = parseInt($bufferDespues.val(), 10);
     if (isNaN(bufferAntesVal) || bufferAntesVal < 0) {
-      $errorModal.append('<p>' + (i18n.error_buffer_antes_invalido || 'El tiempo de buffer Antes debe ser un número positivo.') + '</p>');
+      $errorModal.append('<p>' + (i18n_asig.error_buffer_antes_invalido || 'Buffer Antes < 0.') + '</p>');
       isValid = false;
     }
     if (isNaN(bufferDespuesVal) || bufferDespuesVal < 0) {
-      $errorModal.append('<p>' + (i18n.error_buffer_despues_invalido || 'El tiempo de buffer Después debe ser un número positivo.') + '</p>');
+      $errorModal.append('<p>' + (i18n_asig.error_buffer_despues_invalido || 'Buffer Después < 0.') + '</p>');
       isValid = false;
     }
   }
-
-  // Si hay errores, mostrar el contenedor de errores
-  if (!isValid && $errorModal.length) {
-    $errorModal.show();
-    console.log("Errores de validación encontrados.");
-  } else if (isValid) {
-    console.log("Validación pasada.");
-  }
+  if (!isValid && $errorModal.length) $errorModal.show();else if (isValid) console.log("Validación pasada.");
   console.log('--- Finalizando validarFormulario --- Retornando:', isValid);
   return isValid;
 }
@@ -798,7 +790,10 @@ __webpack_require__.r(__webpack_exports__);
 /* harmony import */ var jquery__WEBPACK_IMPORTED_MODULE_0__ = __webpack_require__(/*! jquery */ "jquery");
 /* harmony import */ var jquery__WEBPACK_IMPORTED_MODULE_0___default = /*#__PURE__*/__webpack_require__.n(jquery__WEBPACK_IMPORTED_MODULE_0__);
 /* harmony import */ var _modal_init__WEBPACK_IMPORTED_MODULE_1__ = __webpack_require__(/*! ./modal-init */ "./assets/src/js/admin/modal-init.js");
+/* harmony import */ var _modal_form_interaction__WEBPACK_IMPORTED_MODULE_2__ = __webpack_require__(/*! ./modal-form-interaction */ "./assets/src/js/admin/modal-form-interaction.js");
+function _typeof(o) { "@babel/helpers - typeof"; return _typeof = "function" == typeof Symbol && "symbol" == typeof Symbol.iterator ? function (o) { return typeof o; } : function (o) { return o && "function" == typeof Symbol && o.constructor === Symbol && o !== Symbol.prototype ? "symbol" : typeof o; }, _typeof(o); }
 // assets/src/js/admin/table-actions.js
+
 
 
 
@@ -944,96 +939,107 @@ function initTableActions(tableContainerSelector) {
     }
   }); // Fin click .mph-accion-eliminar
 
-  // --- Acción Asignar ---
+  // --- Acción Asignar (Desde la tabla) ---
+  /* Inicia Modificación: Reescribir Acción Asignar */
   $tableContainer.on('click', '.mph-accion-asignar', function (e) {
     e.preventDefault();
     var $button = jquery__WEBPACK_IMPORTED_MODULE_0___default()(this);
-    var horarioInfoString = $button.data('horario-info');
-    console.log('Botón Asignar clickeado.');
-    if (!horarioInfoString) {
-      console.error("Error: No se encontró data-horario-info en el botón Asignar.");
-      alert("Error al obtener información del horario.");
-      return;
-    }
+    console.log('Botón Asignar (desde tabla) clickeado.');
     try {
-      // 1. Leer el atributo data-* usando jQuery. jQuery intenta parsear automáticamente.
       var horarioInfo = $button.data('horario-info');
-      console.log('Info Horario Objeto (de .data()):', horarioInfo);
+      console.log('Info Horario para Asignar (desde tabla):', horarioInfo);
+      if (!horarioInfo || _typeof(horarioInfo) !== 'object' || !horarioInfo.horario_id) {
+        throw new Error("Datos inválidos o falta horario_id en data-horario-info.");
+      }
       var $modal = jquery__WEBPACK_IMPORTED_MODULE_0___default()('#mph-modal-horario');
       if (!$modal.length) {
-        throw new Error("No se pudo obtener un objeto válido de data-horario-info.");
+        throw new Error("Modal #mph-modal-horario no encontrado.");
       }
       var $form = $modal.find('form#mph-form-horario');
       if (!$form.length) {
-        throw new Error("No se pudo obtener un objeto válido de data-horario-info.");
+        throw new Error("Formulario #mph-form-horario no encontrado.");
       }
 
-      // 4. Resetear el formulario completamente
+      // 1. Resetear el modal a su estado por defecto
       console.log("Reseteando modal antes de asignar...");
-      (0,_modal_init__WEBPACK_IMPORTED_MODULE_1__.resetModalForm)($modal); // Llamar a la función importada
+      (0,_modal_init__WEBPACK_IMPORTED_MODULE_1__.resetModalForm)($modal); // Esto quita clases de modo y oculta sección asignación
 
-      // 5. Pre-llenar campos de Disponibilidad General
-      console.log("Pre-llenando campos generales...");
-      $form.find('#mph_dia_semana').val(horarioInfo.dia || ''); // Buscar dentro de $form
-      $form.find('#mph_hora_inicio_general').val(horarioInfo.inicio || '');
-      $form.find('#mph_hora_fin_general').val(horarioInfo.fin || '');
+      // 2. Aplicar clase para modo "Asignar" (CSS oculta sección general y muestra sección asignación)
+      $modal.addClass('mph-modal-mode-assign');
+      console.log("Clase 'mph-modal-mode-assign' añadida al modal.");
 
-      // 6. Pre-seleccionar checkboxes
+      // 3. Mostrar información del bloque original en #mph-editar-info
+      var $infoDiv = $form.find('#mph-editar-info');
+      if (!$infoDiv.length) {
+        // Crear si no existe
+        $form.prepend('<div id="mph-editar-info"></div>');
+        $infoDiv = $form.find('#mph-editar-info');
+      }
+      if ($infoDiv.length) {
+        var dias = ['', 'Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado', 'Domingo'];
+        var infoHtml = "<h4>Asignando a: ".concat(dias[horarioInfo.dia] || '', " ").concat(horarioInfo.inicio || '', " - ").concat(horarioInfo.fin || '', "</h4>");
+        // Podríamos añadir los admisibles originales aquí si quisiéramos
+        $infoDiv.html(infoHtml).show(); // El CSS .mph-modal-mode-assign #mph-editar-info lo muestra
+      }
+
+      // 4. Pre-llenar campos ocultos necesarios para que el backend sepa el contexto
+      $form.find('#mph_horario_id_editando').val(horarioInfo.horario_id); // ID del bloque Vacío/Mismo que se reemplaza
+      $form.find('#mph_dia_semana').val(horarioInfo.dia); // Este campo está oculto por CSS pero lo llenamos
+      $form.find('#mph_hora_inicio_general').val(horarioInfo.inicio); // Idem
+      $form.find('#mph_hora_fin_general').val(horarioInfo.fin); // Idem
+
+      // Guardar los admisibles originales del bloque "Vacío" en algún lugar si el backend los necesita
+      // y no los puede deducir del horario_id_editando.
+      // Por ahora, el backend (mph_guardar_horario_maestro + mph_calcular_bloques)
+      // usa hora_inicio_general, hora_fin_general y los checkboxes de la sección 1
+      // para determinar los admisibles. Como la sección 1 está oculta, ¡esto es un problema!
+      // SOLUCIÓN: Debemos marcar los checkboxes admisibles en la sección 1 (aunque esté oculta).
+      console.log("Pre-marcando checkboxes admisibles (ocultos) del bloque original...");
+      $form.find('#mph-programas-admisibles-container input').prop('checked', false); // Desmarcar todos primero
       if (horarioInfo.programas_admisibles && Array.isArray(horarioInfo.programas_admisibles)) {
         horarioInfo.programas_admisibles.forEach(function (id) {
-          if (id) $modal.find('#programa_' + id).prop('checked', true);
+          if (id) $form.find('#programa_' + id).prop('checked', true);
         });
       }
+      $form.find('#mph-sedes-admisibles-container input').prop('checked', false);
       if (horarioInfo.sedes_admisibles && Array.isArray(horarioInfo.sedes_admisibles)) {
         horarioInfo.sedes_admisibles.forEach(function (id) {
-          if (id) $modal.find('#sede_' + id).prop('checked', true);
+          if (id) $form.find('#sede_' + id).prop('checked', true);
         });
       }
+      $form.find('#mph-rangos-admisibles-container input').prop('checked', false);
       if (horarioInfo.rangos_admisibles && Array.isArray(horarioInfo.rangos_admisibles)) {
-        // Ojo con el slug aquí si era diferente (rango_edad vs rango_de_edad)
         horarioInfo.rangos_admisibles.forEach(function (id) {
-          if (id) $modal.find('#rango_edad_' + id).prop('checked', true); // Usar slug correcto
+          if (id) $form.find('#rango_edad_' + id).prop('checked', true);
         });
       }
-      console.log("Checkboxes admisibles pre-seleccionados.");
 
-      // 7. Mostrar sección de asignación específica y poblar sus selects
-      // console.log("Mostrando sección de asignación...");
-      // const $seccionAsignacion = $modal.find('.mph-asignacion-especifica');
-      // if ($seccionAsignacion.length) {
-      //     // Llamar a poblarSelects (necesitaríamos importarla o rehacer la lógica aquí)
-      //     // Por ahora, asumimos que existe una función global o la importamos si es necesario.
-      //     // Necesita ejecutarse DESPUÉS de marcar los checkboxes.
-      //     if (typeof poblarSelectsAsignacion === "function") { // ¿Está disponible globalmente? (No ideal)
-      //         poblarSelectsAsignacion($modal); // Necesita $modal si busca elementos internos
-      //         console.log("Selects de asignación poblados.");
-      //     } else {
-      //          console.warn("Función poblarSelectsAsignacion no encontrada/importada en table-actions.js");
-      //          // Podríamos llamar al trigger change de los checkboxes para que se actualice si el listener está activo
-      //          $modal.find('#mph-programas-admisibles-container input:checked').first().trigger('change');
-      //     }
+      // 5. Pre-llenar campos de la Sección de Asignación Específica
+      console.log("Pre-llenando campos de asignación específica...");
+      $form.find('#mph_hora_inicio_asignada').val(horarioInfo.inicio); // Por defecto, ocupa todo el bloque
+      $form.find('#mph_hora_fin_asignada').val(horarioInfo.fin); // Por defecto, ocupa todo el bloque
+      $form.find('#mph_vacantes').val(1); // Default vacantes
+      $form.find('#mph_buffer_minutos_antes').val(60); // Default buffer
+      $form.find('#mph_buffer_minutos_despues').val(60);
+      $form.find('#mph_buffer_linkeado').prop('checked', true);
 
-      // Pre-llenar horas de asignación con las generales (que acabamos de poner)
-      $modal.find('#mph_hora_inicio_asignada').val(horarioInfo.inicio || '');
-      $modal.find('#mph_hora_fin_asignada').val(horarioInfo.fin || '');
-      console.log("Horas de asignación pre-llenadas.");
+      // Poblar los selects de Programa/Sede/Rango basándose en los checkboxes recién marcados
+      console.log("Poblando selects para asignación...");
+      (0,_modal_form_interaction__WEBPACK_IMPORTED_MODULE_2__.poblarSelectsAsignacion)($modal); // Usar la función importada (que lee checkboxes)
 
-      //     // Mostrar la sección (sin animación para rapidez)
-      //     $seccionAsignacion.show();
-      //     console.log("Sección de asignación mostrada.");
-      // } else {
-      //      console.error("Error: Sección de asignación no encontrada en el modal.");
-      // }
+      // 6. Ajustar botón Guardar
+      var $btnGuardar = $form.find('#mph-guardar-horario');
+      if ($btnGuardar.length) {
+        var _window$mph_admin_obj2;
+        $btnGuardar.text(((_window$mph_admin_obj2 = window.mph_admin_obj) === null || _window$mph_admin_obj2 === void 0 || (_window$mph_admin_obj2 = _window$mph_admin_obj2.i18n) === null || _window$mph_admin_obj2 === void 0 ? void 0 : _window$mph_admin_obj2.guardar_asignacion) || 'Guardar Asignación'); // Nuevo texto i18n
+        $btnGuardar.attr('data-action-mode', 'assign_to_existing'); // Nuevo modo
+      }
 
-      // 8. Añadir el ID del horario original que se va a reemplazar/dividir
-      $modal.find('#mph_horario_id_editando').val(horarioInfo.horario_id || '');
-      console.log("ID de horario original (" + (horarioInfo.horario_id || 'N/A') + ") establecido para reemplazo.");
-
-      // 9. Abrir el modal
-      console.log("Abriendo modal para asignar...");
-      (0,_modal_init__WEBPACK_IMPORTED_MODULE_1__.openModal)($modal); // Llamar a la función importada
+      // 7. Abrir el modal
+      console.log("Abriendo modal para asignar a existente...");
+      (0,_modal_init__WEBPACK_IMPORTED_MODULE_1__.openModal)($modal);
     } catch (e) {
-      console.error("Error al parsear horarioInfo o pre-llenar modal para Asignar:", e);
+      console.error("Error al preparar modal para Asignar:", e);
       alert("Error al preparar el formulario de asignación.");
     }
   });
