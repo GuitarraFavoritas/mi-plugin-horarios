@@ -90,7 +90,11 @@ export function initAjaxSubmit($modal) {
             nonceFieldName = 'mph_nonce_actualizar_vacantes'; // Nombre del nuevo nonce field
             const $nonceField = $form.find('input[name="' + nonceFieldName + '"]');
             if ($nonceField.length) { nonceValue = $nonceField.val(); }
-             else { console.error("Campo Nonce para Actualizar Vacantes no encontrado!"); /* ... error ... */ return; }
+             else { 
+                console.error("Campo Nonce para Actualizar Vacantes no encontrado en el formulario!");
+                if ($errorModal.length) $errorModal.text(window.mph_admin_obj?.i18n?.error_seguridad_interna /*|| "Error de seguridad interno (Nonce UV)."*/).show();
+                $button.prop('disabled', false); if ($spinnerModal.length) $spinnerModal.removeClass('is-active'); 
+                return; }
 
             const horarioId = $form.find('#mph_horario_id_editando').val();
             const vacantesVal = $form.find('#mph_vacantes').val();
@@ -105,11 +109,16 @@ export function initAjaxSubmit($modal) {
 
         } else { // save_full
             console.log("Preparando datos para guardar completo/asignar a existente...");
-             ajaxAction = 'mph_guardar_horario_maestro';
-             nonceFieldName = 'mph_nonce_guardar'; // Nombre del nonce field original
-             const $nonceField = $form.find('input[name="' + nonceFieldName + '"]');
-             if ($nonceField.length) { nonceValue = $nonceField.val(); }
-              else { console.error("Campo Nonce para Guardar no encontrado!"); /* ... error ... */ return; }
+            ajaxAction = 'mph_guardar_horario_maestro';
+            nonceFieldName = 'mph_nonce_guardar'; // Nombre del nonce field original
+            const $nonceField = $form.find('input[name="' + nonceFieldName + '"]');
+            if ($nonceField.length) { nonceValue = $nonceField.val(); }
+            else { 
+                console.error("Campo Nonce para Guardar no encontrado en el formulario!");
+                if ($errorModal.length) $errorModal.text(window.mph_admin_obj?.i18n?.error_seguridad_interna /*|| "Error de seguridad interno (Nonce GS)."*/).show();
+                $button.prop('disabled', false); if ($spinnerModal.length) $spinnerModal.removeClass('is-active'); 
+                return; 
+            }
 
              const formData = $form.serialize(); // Obtener todos los datos
              // Crear dataToSend como objeto también para consistencia (opcional)

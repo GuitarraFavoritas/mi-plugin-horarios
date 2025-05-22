@@ -323,7 +323,8 @@ function mph_ajax_vaciar_horario_callback() {
     // 1. Obtener y Validar Datos + Nonce
     $horario_id = isset($_POST['horario_id']) ? intval($_POST['horario_id']) : 0;
     $nonce = isset($_POST['nonce']) ? sanitize_key($_POST['nonce']) : '';
-    if ( empty($horario_id) || empty($nonce) ) { /* ... error datos insuficientes ... */ return; }
+    if ( empty($horario_id) || empty($nonce) ) { error_log("$log_prefix Error: Faltan horario_id o nonce para vaciar.");
+    wp_send_json_error( array( 'message' => __('Datos insuficientes para vaciar.', 'mi-plugin-horarios') ), 400 ); return; }
     error_log("$log_prefix Intentando vaciar Horario ID: $horario_id");
 
     // 2. Verificar Nonce específico para vaciar este ID
@@ -335,11 +336,13 @@ function mph_ajax_vaciar_horario_callback() {
      error_log("$log_prefix Nonce para vaciar verificado.");
 
     // 3. Verificar Permisos
-    if ( ! current_user_can( 'edit_others_posts' ) ) { /* ... error permisos ... */ return; }
+    if ( ! current_user_can( 'edit_others_posts' ) ) { error_log("$log_prefix Error: Permisos insuficientes para vaciar.");
+    wp_send_json_error( array( 'message' => __( 'No tienes permisos para vaciar horarios.', 'mi-plugin-horarios' ) ), 403 ); return; }
 
     // 4. Obtener Post y Metadatos Actuales
     $post_a_vaciar = get_post($horario_id);
-    if (!$post_a_vaciar || $post_a_vaciar->post_type !== 'horario') { /* ... error post inválido ... */ return; }
+    if (!$post_a_vaciar || $post_a_vaciar->post_type !== 'horario') { error_log("$log_prefix Error: El post ID $horario_id no existe o no es un 'horario' para vaciar.");
+    wp_send_json_error( array( 'message' => __('El horario a vaciar no es válido.', 'mi-plugin-horarios') ), 404 ); return; }
     $meta = get_post_meta($horario_id); // Obtener todos los meta
 
      // Extraer datos necesarios

@@ -105,6 +105,10 @@ function mph_admin_enqueue_scripts( $hook ) {
                 'error_seguridad' => __('Error de seguridad. Intente recargar la página.', 'mi-plugin-horarios'),
                 'confirmar_vaciado' => __('¿Estás seguro? Esto convertirá el horario asignado en un bloque vacío.', 'mi-plugin-horarios'),
                 'horario_vaciado' => __('Horario vaciado con éxito.', 'mi-plugin-horarios'),
+                'error_preparar_edicion' => __('Error al preparar el formulario de edición.', 'mi-plugin-horarios'),
+                'error_configuracion' => __('Error interno de configuración.', 'mi-plugin-horarios'),
+                'error_comunicacion' => __('Error de comunicación al intentar vaciar.', 'mi-plugin-horarios'),
+                'error_seguridad_interna' => __('Error de seguridad interno (Nonce UV/GS).', 'mi-plugin-horarios'),
             ),
         );
         error_log("mph_admin_enqueue_scripts: Datos a localizar (SIN NONCE): " . print_r($data_to_localize, true));

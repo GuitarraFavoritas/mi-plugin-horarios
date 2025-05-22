@@ -39,7 +39,7 @@ require_once MI_PLUGIN_HORARIOS_PATH . 'includes/post-types.php';
 require_once MI_PLUGIN_HORARIOS_PATH . 'includes/taxonomies.php';
 require_once MI_PLUGIN_HORARIOS_PATH . 'includes/taxonomy-meta-fields.php';
 require_once MI_PLUGIN_HORARIOS_PATH . 'includes/ajax-handlers.php';
-require_once MI_PLUGIN_HORARIOS_PATH . 'includes/helpers.php';
+//require_once MI_PLUGIN_HORARIOS_PATH . 'includes/helpers.php';
 /**
  * Cargar Archivos de Lógica de Horarios Separados
  */

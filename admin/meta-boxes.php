@@ -73,8 +73,6 @@ function mph_render_horario_modal_html( $post ) {
     <div id="mph-modal-horario" title="<?php esc_attr_e( 'Añadir/Editar Disponibilidad', 'mi-plugin-horarios' ); ?>" style="display: none;">
         <form id="mph-form-horario"> 
 
-            <?php // Nonce para Guardar/Reemplazar completo ?>
-            <?php  // wp_nonce_field( 'mph_guardar_ajax', 'mph_nonce_guardar' ); // Acción más simple, nombre campo simple ?>
             <?php  wp_nonce_field( 'mph_guardar_horario_action', 'mph_nonce_guardar' ); ?>
             <?php  wp_nonce_field( 'mph_actualizar_vacantes_action', 'mph_nonce_actualizar_vacantes' ); ?>
 

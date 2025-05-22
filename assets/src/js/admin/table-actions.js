@@ -257,13 +257,17 @@ export function initTableActions(tableContainerSelector) {
              const horarioInfo = $button.data('horario-info');
              // ... (verificación horarioInfo) ...
              const $modal = $('#mph-modal-horario');
-             if (!$modal.length) { throw new Error(/* ... */); }
+             if (!$modal.length) { 
+                console.error("Error en prepareModalForEditVacantes: Modal #mph-modal-horario no encontrado.");
+                throw new Error("Modal #mph-modal-horario no encontrado."); // Re-lanzar para que el catch externo lo maneje
+            }
 
              resetModalForm($modal); // Resetear primero (quita clases de modo)
              prepareModalForEditVacantes($modal, horarioInfo); // Preparar (añade clase de modo)
              openModal($modal); // Abrir
 
-        } catch (e) { /* ... manejo error ... */ }
+        } catch (e) { console.error("Error al preparar/abrir modal para Editar Vacantes:", e);
+        alert(window.mph_admin_obj?.i18n?.error_preparar_edicion); }
     });
     
     // --- Acción Vaciar */
@@ -274,8 +278,11 @@ export function initTableActions(tableContainerSelector) {
          const nonce = $button.data('nonce');
          const $fila = $button.closest('tr'); // Fila para feedback visual
 
-         if (!horarioId || !nonce) { /* ... error ... */ return; }
-         if (typeof window.mph_admin_obj === 'undefined' || !window.mph_admin_obj.ajax_url || !window.mph_admin_obj.i18n) { /* ... error ... */ return; }
+         if (!horarioId || !nonce) { console.error('Error: Faltan horario_id o nonce para vaciar.');
+         alert(window.mph_admin_obj?.i18n?.error_general || 'Error inesperado.'); return; }
+         
+         if (typeof window.mph_admin_obj === 'undefined' || !window.mph_admin_obj.ajax_url || !window.mph_admin_obj.i18n) { console.error("Error crítico: mph_admin_obj o sus propiedades no están disponibles para Vaciar.");
+         alert(window.mph_admin_obj?.i18n?.error_configuracion /*|| "Error interno de configuración."*/); return; }
          const ajax_url = mph_admin_obj.ajax_url;
          const i18n = mph_admin_obj.i18n;
 
@@ -304,9 +311,12 @@ export function initTableActions(tableContainerSelector) {
                              $button.prop('disabled', false).css('opacity', 1); // Reactivar si no hay update
                          }
                          // alert(i18n.horario_vaciado || 'Horario vaciado.'); // Opcional
-                     } else { /* ... manejo error servidor ... */ $button.prop('disabled', false).css('opacity', 1); }
+                     } else {
+                        console.error('Error servidor al vaciar:', response.data?.message);
+                        alert( (window.mph_admin_obj?.i18n?.error_general || 'Error.') + (response.data?.message ? ' (' + response.data.message + ')' : '')); $button.prop('disabled', false).css('opacity', 1); }
                  })
-                 .fail(function (jqXHR, textStatus, errorThrown) { /* ... manejo error AJAX ... */ $button.prop('disabled', false).css('opacity', 1); });
+                 .fail(function (jqXHR, textStatus, errorThrown) { console.error("Error AJAX al vaciar:", textStatus, errorThrown, jqXHR.responseText); 
+                    alert(window.mph_admin_obj?.i18n?.error_comunicacion /*|| 'Error de comunicación al intentar vaciar.'*/); $button.prop('disabled', false).css('opacity', 1); });
          } else { console.log('Vaciado cancelado.'); }
     });
 
