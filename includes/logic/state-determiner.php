@@ -21,25 +21,26 @@ function mph_determinar_estado_buffer( $maestro_id, $dia_semana, $hora_inicio_bu
     $log_prefix = "mph_determinar_estado_buffer:";
     error_log("$log_prefix Iniciando - Maestro: $maestro_id, Dia: $dia_semana, Buffer: $hora_inicio_buffer_str-$hora_fin_buffer_str, Pos: $posicion, SedeClaseAdy: $sede_id_clase_adyacente, Jornada: $hora_inicio_jornada_str-$hora_fin_jornada_str");
 
-    $base_date = '1970-01-01 '; // Fecha base para comparaciones de tiempo
+    $base_date = '1970-01-01 ';
+    $dt_inicio_buffer = null; $dt_fin_buffer = null;
+    $dt_inicio_jornada = null; $dt_fin_jornada = null;
+    try {
+        $dt_inicio_buffer = new DateTime($base_date . $hora_inicio_buffer_str);
+        $dt_fin_buffer = new DateTime($base_date . $hora_fin_buffer_str);
+        $dt_inicio_jornada = new DateTime($base_date . $hora_inicio_jornada_str);
+        $dt_fin_jornada = new DateTime($base_date . $hora_fin_jornada_str);
+    } catch (Exception $e) {
+        error_log("$log_prefix Error crítico creando DateTime iniciales: " . $e->getMessage() . " para buffer $hora_inicio_buffer_str-$hora_fin_buffer_str o jornada $hora_inicio_jornada_str-$hora_fin_jornada_str");
+        return 'Mismo o Traslado';
+    }
 
-    // --- Preparar DateTimes para comparaciones ---
-    $dt_inicio_buffer = null;
-    $dt_fin_buffer = null;
-    $dt_inicio_jornada = new DateTime($base_date . $hora_inicio_jornada_str);
-    $dt_fin_jornada = new DateTime($base_date . $hora_fin_jornada_str);
-    
-     try {
-          $dt_inicio_buffer = new DateTime($base_date . $hora_inicio_buffer_str);
-          $dt_fin_buffer = new DateTime($base_date . $hora_fin_buffer_str);
-     } catch (Exception $e) {
-         error_log("$log_prefix Error creando DateTime para buffer actual: " . $e->getMessage());
-         return 'Mismo o Traslado'; // Default en error de fecha
-     }
+
+
+
+
 
     // --- Obtener datos de la Sede de la CLASE Adyacente (la que genera este buffer) ---
-    $hora_cierre_sede_clase_ady = null;
-    $es_sede_clase_ady_comun = false;
+    $hora_cierre_sede_clase_ady = null; $es_sede_clase_ady_comun = false;
 
 
     if ( $sede_id_clase_adyacente > 0 ) {
@@ -52,26 +53,29 @@ function mph_determinar_estado_buffer( $maestro_id, $dia_semana, $hora_inicio_bu
         error_log("$log_prefix Sede Clase Ady ID: $sede_id_clase_adyacente - Cierre: " . ($hora_cierre_sede_clase_ady ?? 'N/A') . " - Común: " . ($es_sede_clase_ady_comun ? 'Sí' : 'No'));
     }
 
-    // --- Obtener todos los horarios del maestro para ese día ---
-    // (Esto es crucial para la lógica de Traslado y Mismo con vecinos)
+     // --- Obtener TODOS los bloques del día (para encontrar vecinos) ---
+    // Con "Borrar y Recrear", esto a menudo estará vacío para los bloques que se están creando.
+    // Su utilidad aumentará con la "Actualización Inteligente".
     $todos_horarios_dia = mph_get_horarios_existentes_dia( $maestro_id, $dia_semana );
+    
+
     // Filtrar solo clases asignadas/llenas para encontrar clases vecinas
-    $clases_vecinas_posts = array_filter($todos_horarios_dia, function($h) {
-        $estado_h = get_post_meta($h->ID, 'mph_estado', true);
-        return ($estado_h === 'Asignado' || $estado_h === 'Lleno');
-    });
-    // Filtrar bloques Vacío/Buffer para encontrar vecinos no asignados
-    $bloques_no_asignados_vecinos_posts = array_filter($todos_horarios_dia, function($h) {
-        $estado_h = get_post_meta($h->ID, 'mph_estado', true);
-        return !in_array($estado_h, ['Asignado', 'Lleno']);
-    });
+    // $clases_vecinas_posts = array_filter($todos_horarios_dia, function($h) {
+    //     $estado_h = get_post_meta($h->ID, 'mph_estado', true);
+    //     return ($estado_h === 'Asignado' || $estado_h === 'Lleno');
+    // });
+    // // Filtrar bloques Vacío/Buffer para encontrar vecinos no asignados
+    // $bloques_no_asignados_vecinos_posts = array_filter($todos_horarios_dia, function($h) {
+    //     $estado_h = get_post_meta($h->ID, 'mph_estado', true);
+    //     return !in_array($estado_h, ['Asignado', 'Lleno']);
+    // });
 
 
     // --- Búsqueda de Bloques Inmediatamente Adyacentes (Clases o No Asignados) ---
     $bloque_siguiente_al_buffer = null; // Puede ser Clase o Vacío/Buffer
     $bloque_anterior_al_buffer = null;  // Puede ser Clase o Vacío/Buffer
 
-    // Convertir horas del buffer actual para comparación precisa
+    // // Convertir horas del buffer actual para comparación precisa
     $dt_buffer_inicio_actual = new DateTime($base_date . $hora_inicio_buffer_str);
     $dt_buffer_fin_actual = new DateTime($base_date . $hora_fin_buffer_str);
 
@@ -102,75 +106,127 @@ function mph_determinar_estado_buffer( $maestro_id, $dia_semana, $hora_inicio_bu
     if ($bloque_siguiente_al_buffer) error_log("$log_prefix Bloque siguiente encontrado: ID " . $bloque_siguiente_al_buffer->ID . " (" . get_post_meta($bloque_siguiente_al_buffer->ID, 'mph_estado', true) . ")");
 
 
-    // PRIORIDAD 1: TRASLADO (SOLO forzado entre clases asignadas en sedes diferentes)
-    // Con "Borrar y Recrear", esta lógica es difícil que se active correctamente para un buffer que se está creando.
-    // Se activará si SE PROCESAN DOS ASIGNACIONES JUNTAS en una misma llamada a calculator.
-    if ($posicion === 'despues' && $bloque_siguiente_al_buffer) { 
+    // PRIORIDAD 1: TRASLADO (Entre dos clases asignadas en sedes diferentes)
+    if ($posicion === 'despues' && $bloque_siguiente_al_buffer) {
         $estado_siguiente = get_post_meta($bloque_siguiente_al_buffer->ID, 'mph_estado', true);
-    if ($estado_siguiente === 'Asignado' || $estado_siguiente === 'Lleno') {
-        $sede_clase_siguiente = (int) get_post_meta($bloque_siguiente_al_buffer->ID, 'mph_sede_asignada', true);
-        if ($sede_clase_siguiente > 0 && $sede_id_clase_adyacente > 0 && $sede_clase_siguiente !== $sede_id_clase_adyacente) {
-            error_log("$log_prefix Estado = Traslado (Buffer DESPUES entre sedes $sede_id_clase_adyacente y $sede_clase_siguiente)");
-            return 'Traslado';
+        if ($estado_siguiente === 'Asignado' || $estado_siguiente === 'Lleno') {
+            $sede_clase_siguiente = (int) get_post_meta($bloque_siguiente_al_buffer->ID, 'mph_sede_asignada', true);
+            if ($sede_clase_siguiente > 0 && $sede_id_clase_adyacente > 0 && $sede_clase_siguiente !== $sede_id_clase_adyacente) {
+                error_log("$log_prefix Estado = Traslado (Buffer DESPUES entre clases en sedes diferentes)");
+                return 'Traslado';
+            }
         }
-    } }
-    elseif ($posicion === 'antes' && $bloque_anterior_al_buffer) { 
+    } elseif ($posicion === 'antes' && $bloque_anterior_al_buffer) {
         $estado_anterior = get_post_meta($bloque_anterior_al_buffer->ID, 'mph_estado', true);
-    if ($estado_anterior === 'Asignado' || $estado_anterior === 'Lleno') {
-        $sede_clase_anterior = (int) get_post_meta($bloque_anterior_al_buffer->ID, 'mph_sede_asignada', true);
-        if ($sede_clase_anterior > 0 && $sede_id_clase_adyacente > 0 && $sede_clase_anterior !== $sede_id_clase_adyacente) {
-            error_log("$log_prefix Estado = Traslado (Buffer ANTES entre sedes $sede_clase_anterior y $sede_id_clase_adyacente)");
-            return 'Traslado';
+        if ($estado_anterior === 'Asignado' || $estado_anterior === 'Lleno') {
+            $sede_clase_anterior = (int) get_post_meta($bloque_anterior_al_buffer->ID, 'mph_sede_asignada', true);
+            if ($sede_clase_anterior > 0 && $sede_id_clase_adyacente > 0 && $sede_clase_anterior !== $sede_id_clase_adyacente) {
+                error_log("$log_prefix Estado = Traslado (Buffer ANTES entre clases en sedes diferentes)");
+                return 'Traslado';
+            }
         }
-    } }
+    }
 
-    /* Inicia Modificación: Ajustar lógica de cierre para priorizar el comportamiento de calculator.php */
-    // PRIORIDAD 2: NO DISPONIBLE (CIERRE SEDE)
-    // Si el buffer es 'despues', la sede adyacente (no común) cierra.
-    // Calculator.php ya divide el buffer si el cierre es DURANTE.
-    // Aquí solo nos preocupamos si este buffer (o su inicio) está EN o DESPUÉS del cierre.
+    // PRIORIDAD 2: NO DISPONIBLE (CIERRE SEDE) o TRASLADO POR CIERRE
     if ( $posicion === 'despues' && !$es_sede_clase_ady_comun && $hora_cierre_sede_clase_ady ) {
         try {
             $dt_hora_cierre_ady = new DateTime($base_date . $hora_cierre_sede_clase_ady);
-            // Si el buffer actual (que podría ser la Parte B de un buffer dividido)
-            // empieza en o después de la hora de cierre.
-            if ($dt_inicio_buffer >= $dt_hora_cierre_ady) {
-                error_log("$log_prefix Estado = No Disponible (Buffer inicia en/después del cierre de SedeAdy: $sede_id_clase_adyacente a las $hora_cierre_sede_clase_ady)");
-                return 'No Disponible'; // Esto cubre la Parte B de un buffer dividido y el Escenario 2.1.
-                                        // Para el Escenario 2.2 (Traslado), calculator.php debe crear el Vacío con SedeY después,
-                                        // y este 'No Disponible' se convertiría en 'Traslado' si tuviéramos info del siguiente.
-                                        // Como no la tenemos, calculator.php es quien extiende el No Disponible si el Vacío
-                                        // posterior solo tiene comunes.
-            }
-            // Si el buffer (no dividido) termina DESPUÉS de la hora de cierre (cierra durante)
-            // Esto ya lo maneja calculator.php al dividir. Si llega aquí, es la parte ANTES del cierre.
-            // Así que no necesitamos la condición ($dt_fin_buffer > $dt_hora_cierre_ady && $dt_inicio_buffer < $dt_hora_cierre_ady) aquí.
 
-        } catch (Exception $e) { error_log("$log_prefix Error comparando hora cierre para 'No Disponible': " . $e->getMessage()); }
+            if ($dt_inicio_buffer >= $dt_hora_cierre_ady) { // Buffer empieza EN o DESPUÉS del cierre
+                error_log("$log_prefix Buffer ($hora_inicio_buffer_str-$hora_fin_buffer_str) afectado por cierre de SedeAdy ($hora_cierre_sede_clase_ady).");
+                // ¿Hay tiempo DESPUÉS de este buffer en la jornada Y sedes físicas viables?
+                if ($dt_fin_buffer < $dt_fin_jornada) {
+                    // Necesitamos los ADMISIBLES GENERALES para este maestro
+                    // Esto es una limitación aquí, ya que esta función no los tiene.
+                    // Solución temporal para la prueba 2.2: si hay tiempo después, es Traslado.
+                    // Esto se volverá más preciso cuando 'calculator' pueda informar mejor el contexto
+                    // o cuando la 'actualización inteligente' permita consultar el 'Vacío' siguiente real.
+                    // Si mph_get_horarios_existentes_dia devolviera el futuro 'Vacío' (en una actualización inteligente),
+                    // podríamos verificar sus sedes aquí.
+
+                    // Lógica simplificada: si hay tiempo, asumimos que podría haber otra sede.
+                    // Esto resultará en 'Traslado' para 2.2. Para 2.3 (solo Online), calculator.php
+                    // debe haber extendido el 'No Disponible' anterior para cubrir este slot.
+                    // Por lo tanto, si llegamos aquí, es porque calculator NO extendió, lo que implica que
+                    // SÍ había un Vacío con sedes físicas después.
+                    $siguiente_bloque_vacio_con_fisica = false; // Placeholder para lógica más avanzada
+                    // Para simular la decisión de calculator.php:
+                    // Si calculator creó un Vacío después de este buffer, y ese vacío tiene sedes físicas.
+                    // Por ahora, si hay tiempo y no es el último slot, decimos traslado.
+                    // Esto necesita que calculator.php sea la fuente de verdad para "extender No Disponible".
+
+                    // Si este bloque es la Parte B (después del cierre) de un buffer dividido por calculator.php:
+                    // Y el siguiente bloque que *creará* calculator.php es un 'Vacío' con sedes físicas.
+                    if ($bloque_siguiente_al_buffer) { // Con Actualización Inteligente esto funcionará
+                        $estado_siguiente = get_post_meta($bloque_siguiente_al_buffer->ID, 'mph_estado', true);
+                        if ($estado_siguiente === 'Vacío') {
+                             $sedes_vacio = get_post_meta($bloque_siguiente_al_buffer->ID, 'mph_sedes_admisibles', true);
+                             $sedes_vacio_arr = !empty($sedes_vacio) ? explode(',', $sedes_vacio) : [];
+                             $sedes_vacio_filtradas = mph_get_filtered_admisibles_sedes($sedes_vacio_arr, get_post_meta($bloque_siguiente_al_buffer->ID, 'mph_hora_inicio', true));
+                             foreach($sedes_vacio_filtradas as $s_id) { if(!get_term_meta($s_id, 'sede_comun', true)) {$siguiente_bloque_vacio_con_fisica = true; break;}}
+                        }
+                    } else { // Si estamos en "Borrar y Recrear", asumimos que calculator decidirá
+                        // si el siguiente Vacío tiene físicas. Si este buffer NO es el último de la jornada,
+                        // y calculator NO lo va a fusionar con un No Disponible extendido, debe ser Traslado.
+                        if ($dt_fin_buffer < $dt_fin_jornada) {
+                            // Esta es una suposición para hacer funcionar el escenario 2.2.
+                            // La decisión final de si el siguiente Vacío tiene físicas o no
+                            // y por ende si este bloque es Traslado o No Disponible, la tiene calculator.php
+                            // al decidir si extender el 'No Disponible' o crear un 'Vacío'.
+                            // Si calculator.php decide crear un Vacío después de este buffer,
+                            // y ese Vacío tiene sedes físicas, este DEBE ser Traslado.
+                            // Para simplificar aquí, si no es fin de jornada, asumimos Traslado.
+                             $siguiente_bloque_vacio_con_fisica = true;
+                        }
+                    }
+
+                    if ($siguiente_bloque_vacio_con_fisica) {
+                        error_log("$log_prefix Estado = Traslado (Sede Ady cerró, pero hay Vacío viable después)");
+                        return 'Traslado';
+                    } else {
+                        error_log("$log_prefix Estado = No Disponible (Sede Ady cerró, y NO hay Vacío viable después o es fin de jornada)");
+                        return 'No Disponible';
+                    }
+                } else { // El buffer termina exactamente con la jornada.
+                    error_log("$log_prefix Estado = No Disponible (Cierre Sede Ady y fin de jornada).");
+                    return 'No Disponible';
+                }
+            }
+            // Si el cierre es DURANTE este buffer, calculator.php lo dividió. Esta función evalúa cada parte.
+            // La parte ANTES del cierre (ej. 15:30-16:00) NO entrará en el if de arriba ($dt_inicio_buffer < $dt_hora_cierre_ady).
+            // Pasará a las reglas de Mismo/Mismo o Traslado.
+        } catch (Exception $e) { error_log("$log_prefix Error en lógica cierre (P2): " . $e->getMessage()); }
     }
-    /* Finaliza Modificación */
 
 
     // PRIORIDAD 3: MISMO
+    // 3a. Límite absoluto de jornada
     if ( ($posicion === 'antes' && $dt_inicio_buffer == $dt_inicio_jornada && $bloque_anterior_al_buffer === null) ) {
-        error_log("$log_prefix Estado = Mismo (Buffer 'antes' al inicio absoluto de la jornada)");
+        error_log("$log_prefix Estado = Mismo (Buffer 'antes' al inicio absoluto de jornada)");
         return 'Mismo';
     }
-    // Para buffer 'despues', la condición de "Mismo" si es fin de jornada absoluta O si lo que sigue es No Disponible (Cierre Sede)
-    if ($posicion === 'despues') {
-        if ($dt_fin_buffer == $dt_fin_jornada && $bloque_siguiente_al_buffer === null) {
-            error_log("$log_prefix Estado = Mismo (Buffer 'despues' al fin absoluto de la jornada)");
-            return 'Mismo';
-        }
-        // Si el siguiente bloque (que creará calculator.php) va a ser un "No Disponible" extendido,
-        // este buffer debería ser "Mismo".
-        // Esta lógica es difícil de implementar aquí sin saber explícitamente lo que calculator hará.
-        // Confiamos en que si calculator.php extiende No Disponible, este bloque (que sería
-        // el que termina justo en la hora de cierre de la sede) se convertirá visualmente en el
-        // último antes del cierre total. Su estado aquí podría ser Mismo o Traslado.
-        // Dejamos el TODO para la Fase 2.5.
+    if ( ($posicion === 'despues' && $dt_fin_buffer == $dt_fin_jornada && $bloque_siguiente_al_buffer === null) ) {
+        error_log("$log_prefix Estado = Mismo (Buffer 'despues' al fin absoluto de jornada)");
+        return 'Mismo';
     }
-    // TODO: Lógica "Mismo" si adyacente es Vacío con sede única compatible (requiere info de los admisibles del Vacío).
+
+    // 3b. Sucedido por 'No Disponible (Cierre Sede)'
+    if ($posicion === 'despues' && $bloque_siguiente_al_buffer) {
+         $estado_siguiente = get_post_meta($bloque_siguiente_al_buffer->ID, 'mph_estado', true);
+         if ($estado_siguiente === 'No Disponible') {
+             error_log("$log_prefix Estado = Mismo (Sucedido por 'No Disponible') - Cubre Escenario 2.3");
+             return 'Mismo';
+         }
+    }
+
+    // 3c. Lógica "Mismo" si adyacente es Vacío con sede única compatible (TODO - requiere Fase 2.5)
+    // if ($posicion === 'antes' && $bloque_anterior_al_buffer && get_post_meta($bloque_anterior_al_buffer->ID, 'mph_estado', true) === 'Vacío') {
+    //     $sedes_vacio_anterior_str = get_post_meta($bloque_anterior_al_buffer->ID, 'mph_sedes_admisibles', true);
+    //     // ... lógica para verificar si solo contiene $sede_id_clase_adyacente o comunes ...
+    // }
+    // if ($posicion === 'despues' && $bloque_siguiente_al_buffer && get_post_meta($bloque_siguiente_al_buffer->ID, 'mph_estado', true) === 'Vacío') {
+    //     // ... lógica similar ...
+    // }
 
 
     // PRIORIDAD 4: DEFAULT

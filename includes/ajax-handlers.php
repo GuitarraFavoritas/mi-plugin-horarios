@@ -38,13 +38,11 @@ add_action( 'init', 'mph_register_ajax_actions' ); // Registrar las acciones al 
  * y devuelve una respuesta JSON.
  */
 function mph_ajax_guardar_horario_maestro_callback() {
+    global $wpdb;
     $log_prefix = "AJAX mph_guardar_horario_maestro:";
     error_log("$log_prefix Petición AJAX recibida.");
-
+    
     // --- 1. Verificación de Seguridad ---
-    // Verificar Nonce (Enviado desde JS como 'nonce')
-    //$nonce_action = 'mph_guardar_ajax'; // Acción simple usada en wp_nonce_field
-    //$nonce_name = 'mph_nonce_guardar'; // Nombre simple del campo en $_POST 
 
     $nonce_action = 'mph_guardar_horario_action'; // Acción simple usada en wp_nonce_field
     $nonce_name = 'mph_nonce_guardar'; // Nombre simple del campo en $_POST
@@ -94,9 +92,9 @@ function mph_ajax_guardar_horario_maestro_callback() {
     $sanitized_data['buffer_minutos_antes'] = isset($_POST['buffer_minutos_antes']) ? intval($_POST['buffer_minutos_antes']) : 0;
     $sanitized_data['buffer_minutos_despues'] = isset($_POST['buffer_minutos_despues']) ? intval($_POST['buffer_minutos_despues']) : 0;
 
-    // ID del horario que se está editando (si aplica)
-    $horario_id_editando = isset($_POST['horario_id']) ? intval($_POST['horario_id']) : 0;
-     error_log("$log_prefix Editando Horario ID: $horario_id_editando");
+    // $id_bloque_original_a_reemplazar sigue siendo útil para saber si es una edición/asignación
+    $id_bloque_original_a_reemplazar = isset($_POST['horario_id']) ? intval($_POST['horario_id']) : 0;
+    error_log("$log_prefix ID de bloque original a reemplazar/editar: $id_bloque_original_a_reemplazar");
 
 
     // Validar datos sanitizados básicos
@@ -108,147 +106,128 @@ function mph_ajax_guardar_horario_maestro_callback() {
     error_log("$log_prefix Datos sanitizados listos: " . print_r($sanitized_data, true));
 
 
-    // --- 3. Lógica de Negocio: Calcular Bloques ---
-    // Llamar a la función central de cálculo que definimos en calculator.php
+    // --- 3. Lógica de Negocio: Calcular Bloques Nuevos/Ideales ---
     error_log("$log_prefix Llamando a mph_calcular_bloques_horario...");
-    $bloques_calculados = mph_calcular_bloques_horario( $sanitized_data['maestro_id'], $sanitized_data );
+    $bloques_calculados_nuevos = mph_calcular_bloques_horario( $sanitized_data['maestro_id'], $sanitized_data );
 
     // Manejar posible WP_Error devuelto por la función de cálculo
-    if ( is_wp_error( $bloques_calculados ) ) {
-        error_log("$log_prefix Error devuelto por mph_calcular_bloques_horario: " . $bloques_calculados->get_error_message());
-        wp_send_json_error( array( 'message' => $bloques_calculados->get_error_message() ), 400 );
+    if ( is_wp_error( $bloques_calculados_nuevos ) ) {
+        error_log("$log_prefix Error devuelto por mph_calcular_bloques_horario: " . $bloques_calculados_nuevos->get_error_message());
+        wp_send_json_error( array( 'message' => $bloques_calculados_nuevos->get_error_message() ), 400 );
         return;
     }
 
-    if ( empty( $bloques_calculados ) ) {
+    if ( empty( $bloques_calculados_nuevos ) ) {
          error_log("$log_prefix mph_calcular_bloques_horario no devolvió bloques.");
          wp_send_json_error( array( 'message' => __( 'No se pudieron calcular los bloques de horario.', 'mi-plugin-horarios' ) ), 500 ); // 500 Internal Server Error
          return;
     }
-    error_log("$log_prefix Bloques calculados (" . count($bloques_calculados) . "): " . print_r($bloques_calculados, true));
+    error_log("$log_prefix Bloques calculados nuevos (" . count($bloques_calculados_nuevos) . "): " . print_r($bloques_calculados_nuevos, true));
+
+//----------- Lógica de Actualización Inteligente V1 */
+    $wpdb->query('START TRANSACTION'); // Iniciar transacción para asegurar atomicidad
+    $posts_creados_ids = array();
+    $posts_actualizados_ids = array();
+    $posts_borrados_ids = array();
+    $errores_operacion = array();
+
+    // B. Identificar el rango horario de la operación actual
+    // (definido por hora_inicio_general y hora_fin_general de la entrada del modal)
+    $base_date = '1970-01-01 ';
+    try {
+        $dt_operacion_inicio = new DateTime($base_date . $sanitized_data['hora_inicio_general']);
+        $dt_operacion_fin = new DateTime($base_date . $sanitized_data['hora_fin_general']);
+    } catch (Exception $e) {
+        error_log("$log_prefix Error crítico con fechas de operación: " . $e->getMessage());
+        $wpdb->query('ROLLBACK');
+        wp_send_json_error(array('message' => 'Error interno con fechas de operación.'), 500);
+        return;
+    }
+    error_log("$log_prefix Rango de operación actual: " . $sanitized_data['hora_inicio_general'] . " - " . $sanitized_data['hora_fin_general']);
 
 
-    // --- 4. Persistencia: Crear/Actualizar Posts CPT 'Horario' ---
-    // Aquí viene la lógica para interactuar con la base de datos.
-
-    // **Estrategia:**
-    // 1. Obtener TODOS los horarios existentes para ese maestro y día ANTES de hacer cambios.
-    // 2. Comparar los bloques calculados con los existentes.
-    // 3. Identificar qué bloques existentes necesitan ser BORRADOS (porque ya no aplican o serán reemplazados).
-    // 4. Identificar qué bloques existentes necesitan ser ACTUALIZADOS (si un bloque calculado coincide en tiempo con uno existente pero cambia estado/meta).
-    // 5. Identificar qué bloques calculados son NUEVOS y necesitan ser CREADOS.
-    // Esta estrategia de comparación/actualización es compleja.
-
-    // **Estrategia más simple (pero potencialmente menos eficiente para muchas ediciones):**
-    // 1. BORRAR todos los horarios existentes del maestro para el rango de tiempo general afectado por esta entrada.
-    // 2. CREAR nuevos posts 'Horario' para cada uno de los $bloques_calculados.
-    // Adoptaremos esta estrategia más simple por ahora.
-
-    // --- 4.a. Borrar Horarios Existentes en el Rango General ---
-    error_log("$log_prefix Intentando borrar horarios existentes en el rango general...");
-    $args_delete = array(
-        'post_type'      => 'horario',
-        'post_status'    => 'publish',
-        'posts_per_page' => -1,
-        'meta_query'     => array(
-            'relation' => 'AND',
-            array( 'key' => 'maestro_id', 'value' => $sanitized_data['maestro_id'], 'compare' => '=', 'type' => 'NUMERIC' ),
-            array( 'key' => 'mph_dia_semana', 'value' => $sanitized_data['dia_semana'], 'compare' => '=', 'type' => 'NUMERIC' ),
-            // Seleccionar posts cuyas horas se solapen con el rango general CUBIERTO por esta entrada
-            // Esta query de solapamiento de tiempo con meta es compleja. Simplificamos:
-            // Borramos todos los del día y maestro que caigan *dentro* del inicio/fin general.
-            // ¡PRECAUCIÓN! Esto podría borrar más de lo necesario si los rangos se solapan de formas complejas.
-            // Una alternativa sería borrar solo si el horario_id_editando se proporcionó.
-            // O borrar TODOS los del día para este maestro y recrear. Vamos con esto último por simplicidad ahora.
-        ),
-        'fields' => 'ids' // Obtener solo IDs para borrar
-    );
-     // TODO: Refinar la query para borrar solo los posts estrictamente reemplazados por los nuevos bloques.
-     // Por ahora, borramos TODOS los del día para este maestro para asegurar limpieza.
-     // ¡¡ESTO ES DRÁSTICO!! Considera una estrategia de actualización si esto causa problemas.
-    $horarios_a_borrar_query = new WP_Query( $args_delete );
-    $horarios_a_borrar_ids = $horarios_a_borrar_query->posts;
-
-    $borrados_count = 0;
-    if ( !empty($horarios_a_borrar_ids) ) {
-        error_log("$log_prefix Encontrados " . count($horarios_a_borrar_ids) . " horarios existentes para borrar.");
-        foreach ( $horarios_a_borrar_ids as $horario_id ) {
-            $delete_result = wp_delete_post( $horario_id, true ); // true = forzar borrado (sin papelera)
-            if ($delete_result) {
-                $borrados_count++;
-            } else {
-                error_log("$log_prefix Error al borrar Horario ID: $horario_id");
-            }
-        }
-        error_log("$log_prefix Borrados $borrados_count horarios existentes.");
-    } else {
-        error_log("$log_prefix No se encontraron horarios existentes para borrar.");
+    // C. Borrar bloques existentes que se SOLAPAN COMPLETAMENTE o ESTÁN DENTRO del RANGO DE OPERACIÓN.
+    //    Y también borrar el $id_bloque_original_a_reemplazar si se pasó.
+    $ids_a_borrar_definitivo = array();
+    if ($id_bloque_original_a_reemplazar > 0) {
+        $ids_a_borrar_definitivo[$id_bloque_original_a_reemplazar] = true; // Usar claves para unicidad
     }
 
+    $horarios_existentes_db_dia = mph_get_horarios_existentes_dia( $sanitized_data['maestro_id'], $sanitized_data['dia_semana'] );
+error_log("$log_prefix Encontrados " . count($horarios_existentes_db_dia) . " horarios existentes en BD para el día completo.");
 
-    // --- 4.b. Crear Nuevos Posts Horario ---
-    $creados_count = 0;
-    $errores_creacion = array();
+    foreach ($horarios_existentes_db_dia as $h_existente) {
+        $h_existente_id = $h_existente->ID;
+        $h_existente_inicio_str = get_post_meta($h_existente_id, 'mph_hora_inicio', true);
+        $h_existente_fin_str = get_post_meta($h_existente_id, 'mph_hora_fin', true);
+        if (!$h_existente_inicio_str || !$h_existente_fin_str) continue;
 
-    foreach ( $bloques_calculados as $bloque ) {
-        error_log("$log_prefix Intentando crear post para bloque: " . $bloque['post_title']);
+        try {
+            $dt_existente_inicio = new DateTime($base_date . $h_existente_inicio_str);
+            $dt_existente_fin = new DateTime($base_date . $h_existente_fin_str);
+
+            // Condición: El bloque existente está completamente contenido o es igual al rango de operación
+            if ($dt_existente_inicio >= $dt_operacion_inicio && $dt_existente_fin <= $dt_operacion_fin) {
+                 error_log("$log_prefix Bloque existente ID $h_existente_id ($h_existente_inicio_str-$h_existente_fin_str) está dentro o es igual al rango de operación. Marcado para borrar.");
+                $ids_a_borrar_definitivo[$h_existente_id] = true;
+            }
+            // Podríamos añadir lógica para solapamientos parciales, pero eso es más complejo.
+            // Por ahora, solo los contenidos.
+        } catch (Exception $e) { continue; }
+    }
+
+    foreach (array_keys($ids_a_borrar_definitivo) as $id_a_borrar) {
+        error_log("$log_prefix Borrando ID: $id_a_borrar");
+        $delete_result = wp_delete_post( $id_a_borrar, true ); // Forzar borrado
+        if ($delete_result) {
+            $posts_borrados_ids[] = $id_a_borrar;
+        } else {
+            $errores_operacion[] = "Error borrando post ID $id_a_borrar.";
+            error_log("$log_prefix Error borrando post ID $id_a_borrar.");
+        }
+    }
+    error_log("$log_prefix Borrados " . count($posts_borrados_ids) . " bloques que estaban en el rango de la operación o eran el original a reemplazar.");
+
+    // D. Insertar todos los Bloques Calculados Nuevos
+    // Estos bloques calculados ya cubren el rango de la operación y sus divisiones.
+    foreach ( $bloques_calculados_nuevos as $bloque_nuevo ) {
+        error_log("$log_prefix Insertando nuevo bloque: " . $bloque_nuevo['post_title']);
         $post_data = array(
             'post_type'    => 'horario',
-            'post_title'   => sanitize_text_field( $bloque['post_title'] ),
+            'post_title'   => sanitize_text_field( $bloque_nuevo['post_title'] ),
             'post_status'  => 'publish',
-            'post_author'  => get_current_user_id(), // Asignar al usuario actual
-            'meta_input'   => $bloque['meta_input'], // Array de metadatos ya preparado
+            'post_author'  => get_current_user_id(),
+            'meta_input'   => $bloque_nuevo['meta_input'],
         );
-
         $new_post_id = wp_insert_post( $post_data, true ); // true = devolver WP_Error si falla
-
         if ( is_wp_error( $new_post_id ) ) {
             $error_message = $new_post_id->get_error_message();
-            error_log("$log_prefix Error al crear post para bloque '" . $bloque['post_title'] . "': " . $error_message);
-            $errores_creacion[] = $error_message;
+            error_log("$log_prefix Error al crear post para bloque '" . $bloque_nuevo['post_title'] . "': " . $error_message);
+            $errores_operacion[] = $error_message;
         } else {
             error_log("$log_prefix Post Horario creado con ID: $new_post_id");
-            $creados_count++;
+            $posts_creados_ids[] = $new_post_id;
         }
     }
 
-    // --- 5. Preparar y Enviar Respuesta JSON ---
-    if ( $creados_count > 0 && empty($errores_creacion) ) {
-        error_log("$log_prefix Éxito: Creados $creados_count bloques.");
-
-        // Generar HTML actualizado de la tabla para devolver al JS
+    // E. Finalizar Transacción y Enviar Respuesta
+    if (empty($errores_operacion)) {
+        $wpdb->query('COMMIT');
+        error_log("$log_prefix Éxito: Operaciones completadas. Creados: " . count($posts_creados_ids) . ", Borrados: " . count($posts_borrados_ids));
         $html_tabla = '';
         if ( function_exists( 'mph_get_horarios_table_html' ) ) {
-             // Asegurarse de que $sanitized_data['maestro_id'] tiene el ID correcto
-            if (!empty($sanitized_data['maestro_id'])) {
-                 $html_tabla = mph_get_horarios_table_html( $sanitized_data['maestro_id'] );
-                 error_log("$log_prefix HTML de tabla generado.");
-             } else {
-                 error_log("$log_prefix Error: No se pudo obtener Maestro ID para generar tabla.");
-             }
-        } else {
-             error_log("$log_prefix Advertencia: Función mph_get_horarios_table_html no encontrada.");
+             $html_tabla = mph_get_horarios_table_html( $sanitized_data['maestro_id'] );
         }
-        
-        wp_send_json_success( array(
-            'message' => __( 'Horario guardado con éxito.', 'mi-plugin-horarios' ),
-            'html_tabla' => $html_tabla // Enviar HTML al JS para actualizar la vista
-        ) );
-
+        wp_send_json_success( array( 'message' => __( 'Horario guardado con éxito.', 'mi-plugin-horarios' ), 'html_tabla' => $html_tabla ) );
     } else {
-         // Hubo errores al crear algunos o todos los posts
-         $error_string = implode( '; ', $errores_creacion );
-         error_log("$log_prefix Fallo: Creados $creados_count bloques, pero con errores: $error_string");
-         wp_send_json_error( array(
-             'message' => __( 'Se produjo un error al guardar algunos bloques de horario: ', 'mi-plugin-horarios' ) . $error_string
-             ), 500 );
+        $wpdb->query('ROLLBACK');
+        $error_string = implode( '; ', $errores_operacion );
+        error_log("$log_prefix Fallo con errores: $error_string. Transacción revertida.");
+        wp_send_json_error( array( 'message' => __( 'Errores al guardar: ', 'mi-plugin-horarios' ) . $error_string ), 500 );
     }
 
-    // wp_die(); // Es importante terminar la ejecución AJAX con wp_die() o similar después de wp_send_json_*
-    // Sin embargo, wp_send_json_* ya incluye die()
-
 } // Fin de mph_ajax_guardar_horario_maestro_callback
-
+//------------
 
 /**
  * Callback para la acción AJAX 'mph_eliminar_horario'.
