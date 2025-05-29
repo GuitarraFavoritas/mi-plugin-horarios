@@ -1,7 +1,63 @@
 // assets/src/js/admin/table-actions.js
 import $ from 'jquery';
 import { openModal, resetModalForm } from './modal-init';
-import { poblarSelectsAsignacion } from './modal-form-interaction';
+import { poblarSelectsAsignacion, initFormInteractions } from './modal-form-interaction'; // Necesitamos poblar si se abre Asig.
+
+/**
+ * Prepara el modal para el modo "Editar Disponibilidad" (para bloques Vacío, Mismo, etc.).
+ * @param {jQuery} $modal - El objeto jQuery del modal.
+ * @param {object} horarioInfo - El objeto con la info del horario.
+ */
+function prepareModalForEditDisp($modal, horarioInfo) {
+    const $form = $modal.find('form#mph-form-horario');
+    if (!$form.length) {
+        console.error("prepareModalForEditDisp: Formulario no encontrado.");
+        return;
+    }
+    console.log("Preparando modal para Editar Disponibilidad...");
+
+    // 1. Aplicar clase de modo (si queremos un estilo visual diferente, o para validación)
+    // $modal.removeClass('mph-modal-mode-assign mph-modal-mode-edit-vacantes').addClass('mph-modal-mode-edit-disp');
+    // Por ahora, el modo por defecto (sin clase de modo específica o 'mph-modal-mode-add-general') es adecuado.
+    // resetModalForm ya quita las clases de modo y restaura la visibilidad por defecto.
+
+    // 2. Pre-llenar Sección 1: Disponibilidad General
+    console.log("Pre-llenando campos de disponibilidad general...");
+    $form.find('#mph_dia_semana').val(horarioInfo.dia || '');
+    $form.find('#mph_hora_inicio_general').val(horarioInfo.inicio_gen || horarioInfo.inicio || ''); // Usar inicio_gen si existe, sino inicio del bloque
+    $form.find('#mph_hora_fin_general').val(horarioInfo.fin_gen || horarioInfo.fin || '');         // Usar fin_gen si existe, sino fin del bloque
+
+    // Pre-seleccionar checkboxes admisibles (resetModalForm ya marca los comunes)
+    console.log("Pre-marcando checkboxes admisibles del bloque original...");
+    if (horarioInfo.prog_admisibles && Array.isArray(horarioInfo.prog_admisibles)) {
+        horarioInfo.prog_admisibles.forEach(id => { if(id) $form.find('#programa_' + id).prop('checked', true); });
+    }
+    if (horarioInfo.sede_admisibles && Array.isArray(horarioInfo.sede_admisibles)) {
+        horarioInfo.sede_admisibles.forEach(id => { if(id) $form.find('#sede_' + id).prop('checked', true); });
+    }
+    if (horarioInfo.rango_admisibles && Array.isArray(horarioInfo.rango_admisibles)) {
+        horarioInfo.rango_admisibles.forEach(id => { if(id) $form.find('#rango_edad_' + id).prop('checked', true); });
+    }
+
+    // 3. Asegurar que la Sección 2 (Asignación) esté oculta inicialmente
+    // (resetModalForm ya debería haber hecho esto)
+    $form.find('.mph-modal-seccion.mph-asignacion-especifica').hide();
+    $form.find('#mph-mostrar-asignacion').show(); // Asegurar que el botón para mostrarla esté visible
+
+    // 4. Ajustar botón Guardar (texto y modo)
+    const $btnGuardar = $form.find('#mph-guardar-horario');
+    if ($btnGuardar.length) {
+        const textoBoton = window.mph_admin_obj?.i18n?.actualizar_disponibilidad || 'Actualizar Disponibilidad';
+        $btnGuardar.text(textoBoton);
+        $btnGuardar.attr('data-action-mode', 'edit_existing_disp'); // Nuevo modo, o reutilizar 'save_full'
+                                                                  // Por ahora, 'save_full' funcionará igual
+                                                                  // pero 'edit_existing_disp' es más descriptivo.
+    }
+
+    // 5. Establecer ID del horario a editar/reemplazar
+    $form.find('#mph_horario_id_editando').val(horarioInfo.horario_id || '');
+    console.log("ID horario (" + (horarioInfo.horario_id || 'N/A') + ") establecido para Editar Disponibilidad.");
+}
 
 
 /**
@@ -240,13 +296,31 @@ export function initTableActions(tableContainerSelector) {
          }
     });
 
-    // --- Acción Editar (Disponibilidad) --- (Placeholder por ahora)
-     $tableContainer.on('click', '.mph-accion-editar-disp', function(e) {
+    // --- Acción Editar (Disponibilidad) ---
+    $tableContainer.on('click', '.mph-accion-editar-disp', function(e) {
         e.preventDefault();
-        console.log('Botón Editar Disp. clickeado (Funcionalidad Pendiente)');
-        alert('Editar Disponibilidad aún no implementado.');
-        // TODO: Lógica similar a Asignar pero pre-llenando el modal completo
-    }); 
+        const $button = $(this);
+        console.log('Botón Editar Disponibilidad clickeado.');
+
+        try {
+            const horarioInfo = $button.data('horario-info');
+            console.log('Info Horario para Editar Disp:', horarioInfo);
+            if (!horarioInfo || typeof horarioInfo !== 'object' || !horarioInfo.horario_id) {
+                throw new Error("Datos inválidos o falta horario_id en data-horario-info.");
+            }
+
+            const $modal = $('#mph-modal-horario');
+            if (!$modal.length) { throw new Error("Modal #mph-modal-horario no encontrado."); }
+
+            resetModalForm($modal); // Resetear primero
+            prepareModalForEditDisp($modal, horarioInfo); // Preparar para este modo
+            openModal($modal); // Abrir
+
+       } catch (e) {
+            console.error("Error al preparar modal para Editar Disponibilidad:", e);
+            alert(window.mph_admin_obj?.i18n?.error_preparar_edicion_disp || "Error al preparar el formulario de edición de disponibilidad.");
+       }
+   });
 
     // --- Acción Editar Vacantes ---
      $tableContainer.on('click', '.mph-accion-editar-vacantes', function(e) {

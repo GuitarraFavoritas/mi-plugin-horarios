@@ -803,7 +803,70 @@ function _typeof(o) { "@babel/helpers - typeof"; return _typeof = "function" == 
 // assets/src/js/admin/table-actions.js
 
 
+ // Necesitamos poblar si se abre Asig.
 
+/**
+ * Prepara el modal para el modo "Editar Disponibilidad" (para bloques Vacío, Mismo, etc.).
+ * @param {jQuery} $modal - El objeto jQuery del modal.
+ * @param {object} horarioInfo - El objeto con la info del horario.
+ */
+function prepareModalForEditDisp($modal, horarioInfo) {
+  var $form = $modal.find('form#mph-form-horario');
+  if (!$form.length) {
+    console.error("prepareModalForEditDisp: Formulario no encontrado.");
+    return;
+  }
+  console.log("Preparando modal para Editar Disponibilidad...");
+
+  // 1. Aplicar clase de modo (si queremos un estilo visual diferente, o para validación)
+  // $modal.removeClass('mph-modal-mode-assign mph-modal-mode-edit-vacantes').addClass('mph-modal-mode-edit-disp');
+  // Por ahora, el modo por defecto (sin clase de modo específica o 'mph-modal-mode-add-general') es adecuado.
+  // resetModalForm ya quita las clases de modo y restaura la visibilidad por defecto.
+
+  // 2. Pre-llenar Sección 1: Disponibilidad General
+  console.log("Pre-llenando campos de disponibilidad general...");
+  $form.find('#mph_dia_semana').val(horarioInfo.dia || '');
+  $form.find('#mph_hora_inicio_general').val(horarioInfo.inicio_gen || horarioInfo.inicio || ''); // Usar inicio_gen si existe, sino inicio del bloque
+  $form.find('#mph_hora_fin_general').val(horarioInfo.fin_gen || horarioInfo.fin || ''); // Usar fin_gen si existe, sino fin del bloque
+
+  // Pre-seleccionar checkboxes admisibles (resetModalForm ya marca los comunes)
+  console.log("Pre-marcando checkboxes admisibles del bloque original...");
+  if (horarioInfo.prog_admisibles && Array.isArray(horarioInfo.prog_admisibles)) {
+    horarioInfo.prog_admisibles.forEach(function (id) {
+      if (id) $form.find('#programa_' + id).prop('checked', true);
+    });
+  }
+  if (horarioInfo.sede_admisibles && Array.isArray(horarioInfo.sede_admisibles)) {
+    horarioInfo.sede_admisibles.forEach(function (id) {
+      if (id) $form.find('#sede_' + id).prop('checked', true);
+    });
+  }
+  if (horarioInfo.rango_admisibles && Array.isArray(horarioInfo.rango_admisibles)) {
+    horarioInfo.rango_admisibles.forEach(function (id) {
+      if (id) $form.find('#rango_edad_' + id).prop('checked', true);
+    });
+  }
+
+  // 3. Asegurar que la Sección 2 (Asignación) esté oculta inicialmente
+  // (resetModalForm ya debería haber hecho esto)
+  $form.find('.mph-modal-seccion.mph-asignacion-especifica').hide();
+  $form.find('#mph-mostrar-asignacion').show(); // Asegurar que el botón para mostrarla esté visible
+
+  // 4. Ajustar botón Guardar (texto y modo)
+  var $btnGuardar = $form.find('#mph-guardar-horario');
+  if ($btnGuardar.length) {
+    var _window$mph_admin_obj;
+    var textoBoton = ((_window$mph_admin_obj = window.mph_admin_obj) === null || _window$mph_admin_obj === void 0 || (_window$mph_admin_obj = _window$mph_admin_obj.i18n) === null || _window$mph_admin_obj === void 0 ? void 0 : _window$mph_admin_obj.actualizar_disponibilidad) || 'Actualizar Disponibilidad';
+    $btnGuardar.text(textoBoton);
+    $btnGuardar.attr('data-action-mode', 'edit_existing_disp'); // Nuevo modo, o reutilizar 'save_full'
+    // Por ahora, 'save_full' funcionará igual
+    // pero 'edit_existing_disp' es más descriptivo.
+  }
+
+  // 5. Establecer ID del horario a editar/reemplazar
+  $form.find('#mph_horario_id_editando').val(horarioInfo.horario_id || '');
+  console.log("ID horario (" + (horarioInfo.horario_id || 'N/A') + ") establecido para Editar Disponibilidad.");
+}
 
 /**
  * Prepara el modal para el modo "Editar Vacantes".
@@ -870,8 +933,8 @@ function prepareModalForEditVacantes($modal, horarioInfo) {
   // 4. Ajustar botón Guardar
   var $btnGuardar = $form.find('#mph-guardar-horario');
   if ($btnGuardar.length) {
-    var _window$mph_admin_obj;
-    var textoBoton = ((_window$mph_admin_obj = window.mph_admin_obj) === null || _window$mph_admin_obj === void 0 || (_window$mph_admin_obj = _window$mph_admin_obj.i18n) === null || _window$mph_admin_obj === void 0 ? void 0 : _window$mph_admin_obj.actualizar_vacantes) || 'Actualizar Vacantes';
+    var _window$mph_admin_obj2;
+    var textoBoton = ((_window$mph_admin_obj2 = window.mph_admin_obj) === null || _window$mph_admin_obj2 === void 0 || (_window$mph_admin_obj2 = _window$mph_admin_obj2.i18n) === null || _window$mph_admin_obj2 === void 0 ? void 0 : _window$mph_admin_obj2.actualizar_vacantes) || 'Actualizar Vacantes';
     $btnGuardar.text(textoBoton);
     $btnGuardar.attr('data-action-mode', 'update_vacantes');
     console.log("Botón Guardar ajustado para 'update_vacantes'.");
@@ -1038,8 +1101,8 @@ function initTableActions(tableContainerSelector) {
       // 6. Ajustar botón Guardar
       var $btnGuardar = $form.find('#mph-guardar-horario');
       if ($btnGuardar.length) {
-        var _window$mph_admin_obj2;
-        $btnGuardar.text(((_window$mph_admin_obj2 = window.mph_admin_obj) === null || _window$mph_admin_obj2 === void 0 || (_window$mph_admin_obj2 = _window$mph_admin_obj2.i18n) === null || _window$mph_admin_obj2 === void 0 ? void 0 : _window$mph_admin_obj2.guardar_asignacion) || 'Guardar Asignación'); // Nuevo texto i18n
+        var _window$mph_admin_obj3;
+        $btnGuardar.text(((_window$mph_admin_obj3 = window.mph_admin_obj) === null || _window$mph_admin_obj3 === void 0 || (_window$mph_admin_obj3 = _window$mph_admin_obj3.i18n) === null || _window$mph_admin_obj3 === void 0 ? void 0 : _window$mph_admin_obj3.guardar_asignacion) || 'Guardar Asignación'); // Nuevo texto i18n
         $btnGuardar.attr('data-action-mode', 'assign_to_existing'); // Nuevo modo
       }
 
@@ -1052,12 +1115,29 @@ function initTableActions(tableContainerSelector) {
     }
   });
 
-  // --- Acción Editar (Disponibilidad) --- (Placeholder por ahora)
+  // --- Acción Editar (Disponibilidad) ---
   $tableContainer.on('click', '.mph-accion-editar-disp', function (e) {
     e.preventDefault();
-    console.log('Botón Editar Disp. clickeado (Funcionalidad Pendiente)');
-    alert('Editar Disponibilidad aún no implementado.');
-    // TODO: Lógica similar a Asignar pero pre-llenando el modal completo
+    var $button = jquery__WEBPACK_IMPORTED_MODULE_0___default()(this);
+    console.log('Botón Editar Disponibilidad clickeado.');
+    try {
+      var horarioInfo = $button.data('horario-info');
+      console.log('Info Horario para Editar Disp:', horarioInfo);
+      if (!horarioInfo || _typeof(horarioInfo) !== 'object' || !horarioInfo.horario_id) {
+        throw new Error("Datos inválidos o falta horario_id en data-horario-info.");
+      }
+      var $modal = jquery__WEBPACK_IMPORTED_MODULE_0___default()('#mph-modal-horario');
+      if (!$modal.length) {
+        throw new Error("Modal #mph-modal-horario no encontrado.");
+      }
+      (0,_modal_init__WEBPACK_IMPORTED_MODULE_1__.resetModalForm)($modal); // Resetear primero
+      prepareModalForEditDisp($modal, horarioInfo); // Preparar para este modo
+      (0,_modal_init__WEBPACK_IMPORTED_MODULE_1__.openModal)($modal); // Abrir
+    } catch (e) {
+      var _window$mph_admin_obj4;
+      console.error("Error al preparar modal para Editar Disponibilidad:", e);
+      alert(((_window$mph_admin_obj4 = window.mph_admin_obj) === null || _window$mph_admin_obj4 === void 0 || (_window$mph_admin_obj4 = _window$mph_admin_obj4.i18n) === null || _window$mph_admin_obj4 === void 0 ? void 0 : _window$mph_admin_obj4.error_preparar_edicion_disp) || "Error al preparar el formulario de edición de disponibilidad.");
+    }
   });
 
   // --- Acción Editar Vacantes ---
@@ -1077,9 +1157,9 @@ function initTableActions(tableContainerSelector) {
       prepareModalForEditVacantes($modal, horarioInfo); // Preparar (añade clase de modo)
       (0,_modal_init__WEBPACK_IMPORTED_MODULE_1__.openModal)($modal); // Abrir
     } catch (e) {
-      var _window$mph_admin_obj3;
+      var _window$mph_admin_obj5;
       console.error("Error al preparar/abrir modal para Editar Vacantes:", e);
-      alert((_window$mph_admin_obj3 = window.mph_admin_obj) === null || _window$mph_admin_obj3 === void 0 || (_window$mph_admin_obj3 = _window$mph_admin_obj3.i18n) === null || _window$mph_admin_obj3 === void 0 ? void 0 : _window$mph_admin_obj3.error_preparar_edicion);
+      alert((_window$mph_admin_obj5 = window.mph_admin_obj) === null || _window$mph_admin_obj5 === void 0 || (_window$mph_admin_obj5 = _window$mph_admin_obj5.i18n) === null || _window$mph_admin_obj5 === void 0 ? void 0 : _window$mph_admin_obj5.error_preparar_edicion);
     }
   });
 
@@ -1092,15 +1172,15 @@ function initTableActions(tableContainerSelector) {
     var $fila = $button.closest('tr'); // Fila para feedback visual
 
     if (!horarioId || !nonce) {
-      var _window$mph_admin_obj4;
+      var _window$mph_admin_obj6;
       console.error('Error: Faltan horario_id o nonce para vaciar.');
-      alert(((_window$mph_admin_obj4 = window.mph_admin_obj) === null || _window$mph_admin_obj4 === void 0 || (_window$mph_admin_obj4 = _window$mph_admin_obj4.i18n) === null || _window$mph_admin_obj4 === void 0 ? void 0 : _window$mph_admin_obj4.error_general) || 'Error inesperado.');
+      alert(((_window$mph_admin_obj6 = window.mph_admin_obj) === null || _window$mph_admin_obj6 === void 0 || (_window$mph_admin_obj6 = _window$mph_admin_obj6.i18n) === null || _window$mph_admin_obj6 === void 0 ? void 0 : _window$mph_admin_obj6.error_general) || 'Error inesperado.');
       return;
     }
     if (typeof window.mph_admin_obj === 'undefined' || !window.mph_admin_obj.ajax_url || !window.mph_admin_obj.i18n) {
-      var _window$mph_admin_obj5;
+      var _window$mph_admin_obj7;
       console.error("Error crítico: mph_admin_obj o sus propiedades no están disponibles para Vaciar.");
-      alert((_window$mph_admin_obj5 = window.mph_admin_obj) === null || _window$mph_admin_obj5 === void 0 || (_window$mph_admin_obj5 = _window$mph_admin_obj5.i18n) === null || _window$mph_admin_obj5 === void 0 ? void 0 : _window$mph_admin_obj5.error_configuracion /*|| "Error interno de configuración."*/);
+      alert((_window$mph_admin_obj7 = window.mph_admin_obj) === null || _window$mph_admin_obj7 === void 0 || (_window$mph_admin_obj7 = _window$mph_admin_obj7.i18n) === null || _window$mph_admin_obj7 === void 0 ? void 0 : _window$mph_admin_obj7.error_configuracion /*|| "Error interno de configuración."*/);
       return;
     }
     var ajax_url = mph_admin_obj.ajax_url;
@@ -1129,15 +1209,15 @@ function initTableActions(tableContainerSelector) {
           }
           // alert(i18n.horario_vaciado || 'Horario vaciado.'); // Opcional
         } else {
-          var _response$data3, _window$mph_admin_obj6, _response$data4;
+          var _response$data3, _window$mph_admin_obj8, _response$data4;
           console.error('Error servidor al vaciar:', (_response$data3 = response.data) === null || _response$data3 === void 0 ? void 0 : _response$data3.message);
-          alert((((_window$mph_admin_obj6 = window.mph_admin_obj) === null || _window$mph_admin_obj6 === void 0 || (_window$mph_admin_obj6 = _window$mph_admin_obj6.i18n) === null || _window$mph_admin_obj6 === void 0 ? void 0 : _window$mph_admin_obj6.error_general) || 'Error.') + ((_response$data4 = response.data) !== null && _response$data4 !== void 0 && _response$data4.message ? ' (' + response.data.message + ')' : ''));
+          alert((((_window$mph_admin_obj8 = window.mph_admin_obj) === null || _window$mph_admin_obj8 === void 0 || (_window$mph_admin_obj8 = _window$mph_admin_obj8.i18n) === null || _window$mph_admin_obj8 === void 0 ? void 0 : _window$mph_admin_obj8.error_general) || 'Error.') + ((_response$data4 = response.data) !== null && _response$data4 !== void 0 && _response$data4.message ? ' (' + response.data.message + ')' : ''));
           $button.prop('disabled', false).css('opacity', 1);
         }
       }).fail(function (jqXHR, textStatus, errorThrown) {
-        var _window$mph_admin_obj7;
+        var _window$mph_admin_obj9;
         console.error("Error AJAX al vaciar:", textStatus, errorThrown, jqXHR.responseText);
-        alert((_window$mph_admin_obj7 = window.mph_admin_obj) === null || _window$mph_admin_obj7 === void 0 || (_window$mph_admin_obj7 = _window$mph_admin_obj7.i18n) === null || _window$mph_admin_obj7 === void 0 ? void 0 : _window$mph_admin_obj7.error_comunicacion /*|| 'Error de comunicación al intentar vaciar.'*/);
+        alert((_window$mph_admin_obj9 = window.mph_admin_obj) === null || _window$mph_admin_obj9 === void 0 || (_window$mph_admin_obj9 = _window$mph_admin_obj9.i18n) === null || _window$mph_admin_obj9 === void 0 ? void 0 : _window$mph_admin_obj9.error_comunicacion /*|| 'Error de comunicación al intentar vaciar.'*/);
         $button.prop('disabled', false).css('opacity', 1);
       });
     } else {
