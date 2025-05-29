@@ -109,6 +109,8 @@ function mph_admin_enqueue_scripts( $hook ) {
                 'error_configuracion' => __('Error interno de configuración.', 'mi-plugin-horarios'),
                 'error_comunicacion' => __('Error de comunicación al intentar vaciar.', 'mi-plugin-horarios'),
                 'error_seguridad_interna' => __('Error de seguridad interno (Nonce UV/GS).', 'mi-plugin-horarios'),
+                'actualizar_disponibilidad' => __('Actualizar Disponibilidad', 'mi-plugin-horarios'),
+                'error_preparar_edicion_disp' => __('Error al preparar el formulario de edición de disponibilidad.', 'mi-plugin-horarios'),
             ),
         );
         error_log("mph_admin_enqueue_scripts: Datos a localizar (SIN NONCE): " . print_r($data_to_localize, true));

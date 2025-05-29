@@ -37,7 +37,6 @@ export function initAjaxSubmit($modal) {
 
          // --- Validación ---
          let isValid = false;
-         /* Inicia Modificación: Asegurar que la validación correcta se llama */
          if (actionMode === 'update_vacantes') {
              console.log("Validando solo vacantes...");
              const $vacantesInput = $form.find('#mph_vacantes'); // Buscar input
@@ -51,10 +50,10 @@ export function initAjaxSubmit($modal) {
                  if ($errorModal.length) $errorModal.text(window.mph_admin_obj?.i18n?.error_vacantes_negativas || 'Las vacantes deben ser un número positivo.').show();
              }
              console.log("Resultado Validación Vacantes:", isValid);
-         } else { // save_full
-             console.log('Llamando a validarFormulario (modo save_full)...');
-             isValid = validarFormulario($form); // Llama a la función completa
-             if (!isValid) console.log('validarFormulario (save_full) devolvió false.');
+         } else { // save_full, assign_to_existing, edit_existing_disp
+             console.log('Llamando a validarFormulario (modo completo)...');
+             isValid = validarFormulario($form); // Usar validación completa
+             if (!isValid) console.log('validarFormulario (modo completo) devolvió false.');
          }
 
          if (!isValid) { return; } // Detener si no es válido
@@ -107,27 +106,13 @@ export function initAjaxSubmit($modal) {
              console.log('Datos a enviar (update_vacantes):', dataToSend);
 
 
-        } else { // save_full
-            console.log("Preparando datos para guardar completo/asignar a existente...");
-            ajaxAction = 'mph_guardar_horario_maestro';
-            nonceFieldName = 'mph_nonce_guardar'; // Nombre del nonce field original
-            const $nonceField = $form.find('input[name="' + nonceFieldName + '"]');
-            if ($nonceField.length) { nonceValue = $nonceField.val(); }
-            else { 
-                console.error("Campo Nonce para Guardar no encontrado en el formulario!");
-                if ($errorModal.length) $errorModal.text(window.mph_admin_obj?.i18n?.error_seguridad_interna /*|| "Error de seguridad interno (Nonce GS)."*/).show();
-                $button.prop('disabled', false); if ($spinnerModal.length) $spinnerModal.removeClass('is-active'); 
-                return; 
-            }
-
-             const formData = $form.serialize(); // Obtener todos los datos
-             // Crear dataToSend como objeto también para consistencia (opcional)
-             // O seguir con string: dataToSend = formData + '&action=' + ajaxAction;
-             // Si usamos objeto, necesitamos parsear formData o añadir campos manualmente
-             // Mantengamos string por ahora para save_full:
-             dataToSend = formData + '&action=' + ajaxAction; // formData ya incluye nonce guardar
-             console.log('Datos COMPLETOS a enviar (save_full):', dataToSend);
-        }        
+        } else { // save_full, assign_to_existing, edit_existing_disp
+             console.log(`Preparando datos para ${actionMode}...`);
+             ajaxAction = 'mph_guardar_horario_maestro';
+             const formData = $form.serialize(); // Incluye horario_id si está en el form
+             dataToSend = formData + '&action=' + ajaxAction;
+             console.log(`Datos COMPLETOS a enviar (${actionMode}):`, dataToSend);
+        }       
 
         // --- Enviar Petición AJAX ---
         if (!window.mph_admin_obj || !window.mph_admin_obj.ajax_url) { /*...*/ return; }

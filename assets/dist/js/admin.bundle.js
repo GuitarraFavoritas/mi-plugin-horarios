@@ -55,7 +55,6 @@ function initAjaxSubmit($modal) {
 
     // --- Validación ---
     var isValid = false;
-    /* Inicia Modificación: Asegurar que la validación correcta se llama */
     if (actionMode === 'update_vacantes') {
       console.log("Validando solo vacantes...");
       var $vacantesInput = $form.find('#mph_vacantes'); // Buscar input
@@ -71,10 +70,10 @@ function initAjaxSubmit($modal) {
       }
       console.log("Resultado Validación Vacantes:", isValid);
     } else {
-      // save_full
-      console.log('Llamando a validarFormulario (modo save_full)...');
-      isValid = (0,_modal_validation__WEBPACK_IMPORTED_MODULE_1__.validarFormulario)($form); // Llama a la función completa
-      if (!isValid) console.log('validarFormulario (save_full) devolvió false.');
+      // save_full, assign_to_existing, edit_existing_disp
+      console.log('Llamando a validarFormulario (modo completo)...');
+      isValid = (0,_modal_validation__WEBPACK_IMPORTED_MODULE_1__.validarFormulario)($form); // Usar validación completa
+      if (!isValid) console.log('validarFormulario (modo completo) devolvió false.');
     }
     if (!isValid) {
       return;
@@ -129,28 +128,12 @@ function initAjaxSubmit($modal) {
       }, nonceFieldName, nonceValue);
       console.log('Datos a enviar (update_vacantes):', dataToSend);
     } else {
-      // save_full
-      console.log("Preparando datos para guardar completo/asignar a existente...");
+      // save_full, assign_to_existing, edit_existing_disp
+      console.log("Preparando datos para ".concat(actionMode, "..."));
       ajaxAction = 'mph_guardar_horario_maestro';
-      nonceFieldName = 'mph_nonce_guardar'; // Nombre del nonce field original
-      var _$nonceField = $form.find('input[name="' + nonceFieldName + '"]');
-      if (_$nonceField.length) {
-        nonceValue = _$nonceField.val();
-      } else {
-        var _window$mph_admin_obj3;
-        console.error("Campo Nonce para Guardar no encontrado en el formulario!");
-        if ($errorModal.length) $errorModal.text((_window$mph_admin_obj3 = window.mph_admin_obj) === null || _window$mph_admin_obj3 === void 0 || (_window$mph_admin_obj3 = _window$mph_admin_obj3.i18n) === null || _window$mph_admin_obj3 === void 0 ? void 0 : _window$mph_admin_obj3.error_seguridad_interna /*|| "Error de seguridad interno (Nonce GS)."*/).show();
-        $button.prop('disabled', false);
-        if ($spinnerModal.length) $spinnerModal.removeClass('is-active');
-        return;
-      }
-      var _formData = $form.serialize(); // Obtener todos los datos
-      // Crear dataToSend como objeto también para consistencia (opcional)
-      // O seguir con string: dataToSend = formData + '&action=' + ajaxAction;
-      // Si usamos objeto, necesitamos parsear formData o añadir campos manualmente
-      // Mantengamos string por ahora para save_full:
-      dataToSend = _formData + '&action=' + ajaxAction; // formData ya incluye nonce guardar
-      console.log('Datos COMPLETOS a enviar (save_full):', dataToSend);
+      var _formData = $form.serialize(); // Incluye horario_id si está en el form
+      dataToSend = _formData + '&action=' + ajaxAction;
+      console.log("Datos COMPLETOS a enviar (".concat(actionMode, "):"), dataToSend);
     }
 
     // --- Enviar Petición AJAX ---
