@@ -35,10 +35,6 @@ function mph_determinar_estado_buffer( $maestro_id, $dia_semana, $hora_inicio_bu
     }
 
 
-
-
-
-
     // --- Obtener datos de la Sede de la CLASE Adyacente (la que genera este buffer) ---
     $hora_cierre_sede_clase_ady = null; $es_sede_clase_ady_comun = false;
 
@@ -200,33 +196,114 @@ function mph_determinar_estado_buffer( $maestro_id, $dia_semana, $hora_inicio_bu
 
 
     // PRIORIDAD 3: MISMO
-    // 3a. Límite absoluto de jornada
-    if ( ($posicion === 'antes' && $dt_inicio_buffer == $dt_inicio_jornada && $bloque_anterior_al_buffer === null) ) {
-        error_log("$log_prefix Estado = Mismo (Buffer 'antes' al inicio absoluto de jornada)");
-        return 'Mismo';
-    }
-    if ( ($posicion === 'despues' && $dt_fin_buffer == $dt_fin_jornada && $bloque_siguiente_al_buffer === null) ) {
-        error_log("$log_prefix Estado = Mismo (Buffer 'despues' al fin absoluto de jornada)");
-        return 'Mismo';
-    }
+    /* Lógica de "Mismo" con Vacío Adyacente Compatible */
+    try {
+        // $dt_inicio_jornada y $dt_fin_jornada ya están definidos y validados al inicio de la función
 
-    // 3b. Sucedido por 'No Disponible (Cierre Sede)'
-    if ($posicion === 'despues' && $bloque_siguiente_al_buffer) {
-         $estado_siguiente = get_post_meta($bloque_siguiente_al_buffer->ID, 'mph_estado', true);
-         if ($estado_siguiente === 'No Disponible') {
-             error_log("$log_prefix Estado = Mismo (Sucedido por 'No Disponible') - Cubre Escenario 2.3");
-             return 'Mismo';
-         }
-    }
+        // 3a. Límite absoluto de jornada
+        if ( ($posicion === 'antes' && $dt_inicio_buffer == $dt_inicio_jornada && $bloque_anterior_al_buffer === null) ) {
+            error_log("$log_prefix Estado = Mismo (Buffer 'antes' al inicio absoluto de jornada)");
+            return 'Mismo';
+        }
+        if ( ($posicion === 'despues' && $dt_fin_buffer == $dt_fin_jornada && $bloque_siguiente_al_buffer === null) ) {
+            error_log("$log_prefix Estado = Mismo (Buffer 'despues' al fin absoluto de jornada)");
+            return 'Mismo';
+        }
 
-    // 3c. Lógica "Mismo" si adyacente es Vacío con sede única compatible (TODO - requiere Fase 2.5)
-    // if ($posicion === 'antes' && $bloque_anterior_al_buffer && get_post_meta($bloque_anterior_al_buffer->ID, 'mph_estado', true) === 'Vacío') {
-    //     $sedes_vacio_anterior_str = get_post_meta($bloque_anterior_al_buffer->ID, 'mph_sedes_admisibles', true);
-    //     // ... lógica para verificar si solo contiene $sede_id_clase_adyacente o comunes ...
-    // }
-    // if ($posicion === 'despues' && $bloque_siguiente_al_buffer && get_post_meta($bloque_siguiente_al_buffer->ID, 'mph_estado', true) === 'Vacío') {
-    //     // ... lógica similar ...
-    // }
+        // 3b. Sucedido por 'No Disponible (Cierre Sede)'
+        if ($posicion === 'despues' && $bloque_siguiente_al_buffer) {
+             $estado_siguiente = get_post_meta($bloque_siguiente_al_buffer->ID, 'mph_estado', true);
+             if ($estado_siguiente === 'No Disponible') { // Asumiendo que 'No Disponible' aquí implica Cierre Sede
+                 error_log("$log_prefix Estado = Mismo (Sucedido por 'No Disponible')");
+                 return 'Mismo';
+             }
+        }
+
+        // 3c. Adyacente a un Vacío con Sede Única Compatible
+        if ($posicion === 'antes' && $bloque_anterior_al_buffer) {
+            $estado_anterior = get_post_meta($bloque_anterior_al_buffer->ID, 'mph_estado', true);
+            if ($estado_anterior === 'Vacío') {
+                error_log("$log_prefix Buffer 'antes' es antecedido por Vacío (ID: {$bloque_anterior_al_buffer->ID}). Verificando sedes compatibles...");
+                $sedes_admisibles_vacio_str = get_post_meta($bloque_anterior_al_buffer->ID, 'mph_sedes_admisibles', true);
+                $hora_inicio_vacio_str = get_post_meta($bloque_anterior_al_buffer->ID, 'mph_hora_inicio', true);
+                if ($sedes_admisibles_vacio_str && $hora_inicio_vacio_str) {
+                    $sedes_vacio_ids = !empty($sedes_admisibles_vacio_str) ? explode(',', $sedes_admisibles_vacio_str) : array();
+                    $sedes_vacio_filtradas = mph_get_filtered_admisibles_sedes($sedes_vacio_ids, $hora_inicio_vacio_str);
+
+                    $solo_sede_adyacente_o_comunes = true;
+                    $sede_adyacente_encontrada_en_vacio = false;
+                    if (empty($sedes_vacio_filtradas)) { // Si no quedan sedes, no es compatible para Mismo
+                        $solo_sede_adyacente_o_comunes = false;
+                    } else {
+                        foreach ($sedes_vacio_filtradas as $id_sede_vacio) {
+                            if ($id_sede_vacio == $sede_id_clase_adyacente) { // Sede de la clase que sigue
+                                $sede_adyacente_encontrada_en_vacio = true;
+                                continue;
+                            }
+                            $es_comun_vacio = get_term_meta($id_sede_vacio, 'sede_comun', true);
+                            if (empty($es_comun_vacio) || $es_comun_vacio !== '1') { // Si hay otra sede física NO común
+                                $solo_sede_adyacente_o_comunes = false;
+                                break;
+                            }
+                        }
+                        // Debe contener la sede adyacente (si esta no es común) O solo comunes
+                        if (!$sede_adyacente_encontrada_en_vacio && !$es_sede_clase_ady_comun && $sede_id_clase_adyacente > 0) {
+                             $solo_sede_adyacente_o_comunes = false; // Si la sede adyacente no común no está, no es Mismo
+                        }
+                    }
+
+                    if ($solo_sede_adyacente_o_comunes) {
+                        error_log("$log_prefix Estado = Mismo (Buffer 'antes' antecedido por Vacío con sede única compatible o solo comunes).");
+                        return 'Mismo';
+                    } else {
+                         error_log("$log_prefix Vacío anterior tiene múltiples sedes físicas no comunes o no incluye la sede adyacente. No es 'Mismo'.");
+                    }
+                }
+            }
+        }
+
+        if ($posicion === 'despues' && $bloque_siguiente_al_buffer) {
+            $estado_siguiente = get_post_meta($bloque_siguiente_al_buffer->ID, 'mph_estado', true);
+            if ($estado_siguiente === 'Vacío') {
+                error_log("$log_prefix Buffer 'despues' es sucedido por Vacío (ID: {$bloque_siguiente_al_buffer->ID}). Verificando sedes compatibles...");
+                $sedes_admisibles_vacio_str = get_post_meta($bloque_siguiente_al_buffer->ID, 'mph_sedes_admisibles', true);
+                $hora_inicio_vacio_str = get_post_meta($bloque_siguiente_al_buffer->ID, 'mph_hora_inicio', true);
+                if ($sedes_admisibles_vacio_str && $hora_inicio_vacio_str) {
+                    $sedes_vacio_ids = !empty($sedes_admisibles_vacio_str) ? explode(',', $sedes_admisibles_vacio_str) : array();
+                    $sedes_vacio_filtradas = mph_get_filtered_admisibles_sedes($sedes_vacio_ids, $hora_inicio_vacio_str);
+
+                    $solo_sede_adyacente_o_comunes = true;
+                    $sede_adyacente_encontrada_en_vacio = false;
+                     if (empty($sedes_vacio_filtradas)) {
+                        $solo_sede_adyacente_o_comunes = false;
+                    } else {
+                        foreach ($sedes_vacio_filtradas as $id_sede_vacio) {
+                            if ($id_sede_vacio == $sede_id_clase_adyacente) { // Sede de la clase que precedió
+                                $sede_adyacente_encontrada_en_vacio = true;
+                                continue;
+                            }
+                            $es_comun_vacio = get_term_meta($id_sede_vacio, 'sede_comun', true);
+                            if (empty($es_comun_vacio) || $es_comun_vacio !== '1') {
+                                $solo_sede_adyacente_o_comunes = false;
+                                break;
+                            }
+                        }
+                        if (!$sede_adyacente_encontrada_en_vacio && !$es_sede_clase_ady_comun && $sede_id_clase_adyacente > 0) {
+                             $solo_sede_adyacente_o_comunes = false;
+                        }
+                    }
+
+                    if ($solo_sede_adyacente_o_comunes) {
+                        error_log("$log_prefix Estado = Mismo (Buffer 'despues' sucedido por Vacío con sede única compatible o solo comunes).");
+                        return 'Mismo';
+                    } else {
+                        error_log("$log_prefix Vacío siguiente tiene múltiples sedes físicas no comunes o no incluye la sede adyacente. No es 'Mismo'.");
+                    }
+                }
+            }
+        }
+
+    } catch (Exception $e) { error_log("$log_prefix Error en lógica 'Mismo': " . $e->getMessage()); }
 
 
     // PRIORIDAD 4: DEFAULT

@@ -792,6 +792,9 @@ function _typeof(o) { "@babel/helpers - typeof"; return _typeof = "function" == 
  * Prepara el modal para el modo "Editar Disponibilidad" (para bloques Vacío, Mismo, etc.).
  * @param {jQuery} $modal - El objeto jQuery del modal.
  * @param {object} horarioInfo - El objeto con la info del horario.
+ *        Esperamos: horario_id, dia, inicio (del bloque), fin (del bloque),
+ *                   programas_admisibles (array IDs), sedes_admisibles (array IDs),
+ *                   rangos_admisibles (array IDs).
  */
 function prepareModalForEditDisp($modal, horarioInfo) {
   var $form = $modal.find('form#mph-form-horario');
@@ -801,49 +804,63 @@ function prepareModalForEditDisp($modal, horarioInfo) {
   }
   console.log("Preparando modal para Editar Disponibilidad...");
 
-  // 1. Aplicar clase de modo (si queremos un estilo visual diferente, o para validación)
-  // $modal.removeClass('mph-modal-mode-assign mph-modal-mode-edit-vacantes').addClass('mph-modal-mode-edit-disp');
-  // Por ahora, el modo por defecto (sin clase de modo específica o 'mph-modal-mode-add-general') es adecuado.
-  // resetModalForm ya quita las clases de modo y restaura la visibilidad por defecto.
+  // 1. Aplicar clase de modo o asegurar estado por defecto
+  // La clase por defecto (sin 'mph-modal-mode-*') ya muestra la Sección 1 y oculta la 2.
+  // resetModalForm ya se encarga de quitar clases de modo.
+  // $modal.removeClass('mph-modal-mode-assign mph-modal-mode-edit-vacantes').addClass('mph-modal-mode-edit-disp'); // Opcional si queremos CSS específico
 
   // 2. Pre-llenar Sección 1: Disponibilidad General
-  console.log("Pre-llenando campos de disponibilidad general...");
+  console.log("Pre-llenando campos de disponibilidad general para editar...");
   $form.find('#mph_dia_semana').val(horarioInfo.dia || '');
-  $form.find('#mph_hora_inicio_general').val(horarioInfo.inicio_gen || horarioInfo.inicio || ''); // Usar inicio_gen si existe, sino inicio del bloque
-  $form.find('#mph_hora_fin_general').val(horarioInfo.fin_gen || horarioInfo.fin || ''); // Usar fin_gen si existe, sino fin del bloque
+  // Las horas generales del formulario serán las horas del bloque que estamos editando
+  $form.find('#mph_hora_inicio_general').val(horarioInfo.inicio_gen || horarioInfo.inicio || '');
+  $form.find('#mph_hora_fin_general').val(horarioInfo.fin_gen || horarioInfo.fin || '');
 
-  // Pre-seleccionar checkboxes admisibles (resetModalForm ya marca los comunes)
-  console.log("Pre-marcando checkboxes admisibles del bloque original...");
-  if (horarioInfo.prog_admisibles && Array.isArray(horarioInfo.prog_admisibles)) {
-    horarioInfo.prog_admisibles.forEach(function (id) {
+  // Pre-seleccionar checkboxes admisibles
+  // resetModalForm ya marca los comunes. Aquí marcamos los específicos de este bloque.
+  console.log("Pre-marcando checkboxes admisibles del bloque a editar...");
+  $form.find('#mph-programas-admisibles-container input').prop('checked', false); // Desmarcar todos primero
+  if (horarioInfo.programas_admisibles && Array.isArray(horarioInfo.programas_admisibles)) {
+    horarioInfo.programas_admisibles.forEach(function (id) {
       if (id) $form.find('#programa_' + id).prop('checked', true);
     });
+  } else {
+    console.warn("No hay programas admisibles en horarioInfo para Editar Disp.");
   }
-  if (horarioInfo.sede_admisibles && Array.isArray(horarioInfo.sede_admisibles)) {
-    horarioInfo.sede_admisibles.forEach(function (id) {
+  $form.find('#mph-sedes-admisibles-container input').prop('checked', false);
+  if (horarioInfo.sedes_admisibles && Array.isArray(horarioInfo.sedes_admisibles)) {
+    horarioInfo.sedes_admisibles.forEach(function (id) {
       if (id) $form.find('#sede_' + id).prop('checked', true);
     });
+  } else {
+    console.warn("No hay sedes admisibles en horarioInfo para Editar Disp.");
   }
-  if (horarioInfo.rango_admisibles && Array.isArray(horarioInfo.rango_admisibles)) {
-    horarioInfo.rango_admisibles.forEach(function (id) {
+
+  // Asegúrate de que el slug de la taxonomía en el ID del checkbox sea el correcto
+  $form.find('#mph-rangos-admisibles-container input').prop('checked', false);
+  if (horarioInfo.rangos_admisibles && Array.isArray(horarioInfo.rangos_admisibles)) {
+    horarioInfo.rangos_admisibles.forEach(function (id) {
       if (id) $form.find('#rango_edad_' + id).prop('checked', true);
     });
+  } else {
+    console.warn("No hay rangos admisibles en horarioInfo para Editar Disp.");
   }
 
   // 3. Asegurar que la Sección 2 (Asignación) esté oculta inicialmente
-  // (resetModalForm ya debería haber hecho esto)
+  // (resetModalForm ya debería haber hecho esto, pero por si acaso)
   $form.find('.mph-modal-seccion.mph-asignacion-especifica').hide();
-  $form.find('#mph-mostrar-asignacion').show(); // Asegurar que el botón para mostrarla esté visible
+  $form.find('#mph-mostrar-asignacion').show();
 
-  // 4. Ajustar botón Guardar (texto y modo)
+  // 4. Ajustar botón Guardar
   var $btnGuardar = $form.find('#mph-guardar-horario');
   if ($btnGuardar.length) {
     var _window$mph_admin_obj;
     var textoBoton = ((_window$mph_admin_obj = window.mph_admin_obj) === null || _window$mph_admin_obj === void 0 || (_window$mph_admin_obj = _window$mph_admin_obj.i18n) === null || _window$mph_admin_obj === void 0 ? void 0 : _window$mph_admin_obj.actualizar_disponibilidad) || 'Actualizar Disponibilidad';
     $btnGuardar.text(textoBoton);
-    $btnGuardar.attr('data-action-mode', 'edit_existing_disp'); // Nuevo modo, o reutilizar 'save_full'
-    // Por ahora, 'save_full' funcionará igual
-    // pero 'edit_existing_disp' es más descriptivo.
+    // Usaremos 'save_full' o un 'edit_existing_disp' que se trate igual que 'save_full' en el AJAX handler.
+    // 'save_full' ya implica que se envían todos los datos del form.
+    $btnGuardar.attr('data-action-mode', 'save_full'); // O 'edit_existing_disp' si quieres diferenciarlo
+    console.log("Botón Guardar ajustado para 'Actualizar Disponibilidad'. Modo: " + $btnGuardar.attr('data-action-mode'));
   }
 
   // 5. Establecer ID del horario a editar/reemplazar
@@ -1098,7 +1115,7 @@ function initTableActions(tableContainerSelector) {
     }
   });
 
-  // --- Acción Editar (Disponibilidad) ---
+  // --- Acción Editar (Disponibilidad - para Vacío, Mismo, MoT) ---
   $tableContainer.on('click', '.mph-accion-editar-disp', function (e) {
     e.preventDefault();
     var $button = jquery__WEBPACK_IMPORTED_MODULE_0___default()(this);
@@ -1106,8 +1123,9 @@ function initTableActions(tableContainerSelector) {
     try {
       var horarioInfo = $button.data('horario-info');
       console.log('Info Horario para Editar Disp:', horarioInfo);
-      if (!horarioInfo || _typeof(horarioInfo) !== 'object' || !horarioInfo.horario_id) {
-        throw new Error("Datos inválidos o falta horario_id en data-horario-info.");
+      // Validar que tengamos los datos necesarios, especialmente los arrays de admisibles
+      if (!horarioInfo || _typeof(horarioInfo) !== 'object' || !horarioInfo.horario_id || !horarioInfo.programas_admisibles || !horarioInfo.sedes_admisibles || !horarioInfo.rangos_admisibles) {
+        throw new Error("Datos incompletos en data-horario-info para Editar Disponibilidad.");
       }
       var $modal = jquery__WEBPACK_IMPORTED_MODULE_0___default()('#mph-modal-horario');
       if (!$modal.length) {
@@ -1119,7 +1137,7 @@ function initTableActions(tableContainerSelector) {
     } catch (e) {
       var _window$mph_admin_obj4;
       console.error("Error al preparar modal para Editar Disponibilidad:", e);
-      alert(((_window$mph_admin_obj4 = window.mph_admin_obj) === null || _window$mph_admin_obj4 === void 0 || (_window$mph_admin_obj4 = _window$mph_admin_obj4.i18n) === null || _window$mph_admin_obj4 === void 0 ? void 0 : _window$mph_admin_obj4.error_preparar_edicion_disp) || "Error al preparar el formulario de edición de disponibilidad.");
+      alert(((_window$mph_admin_obj4 = window.mph_admin_obj) === null || _window$mph_admin_obj4 === void 0 || (_window$mph_admin_obj4 = _window$mph_admin_obj4.i18n) === null || _window$mph_admin_obj4 === void 0 ? void 0 : _window$mph_admin_obj4.error_preparar_edicion_disp) || "Error al preparar el formulario.");
     }
   });
 

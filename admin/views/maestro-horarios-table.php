@@ -151,15 +151,12 @@ function mph_get_horarios_table_html( $maestro_id ) {
                          $rango_col = mph_get_term_list_string($rango_admisibles_ids, 'rango_edad');
                          $disponibilidad_col = '<strong>' . esc_html($estado) . '</strong>';
                 }
-                /* Finaliza Modificación */
-
 
                 // Formatear columna Acciones (Añadir Editar para Vacío/Mismo/Mismo o Traslado)
                 $acciones_col = '';
                 // Botón Eliminar (siempre)
                 $acciones_col .= '<button type="button" class="button button-link mph-accion-horario mph-accion-eliminar" data-horario-id="' . esc_attr($horario_id) . '" data-nonce="' . esc_attr(wp_create_nonce('mph_eliminar_horario_' . $horario_id)) . '">' . esc_html__('Eliminar', 'mi-plugin-horarios') . '</button>';
 
-                /* Inicia Modificación: Lógica botones Editar/Asignar/Vaciar */
                 // Botón Asignar (para Vacío, Mismo o Traslado, Mismo)
                 if (in_array($estado, ['Vacío', 'Mismo o Traslado', 'Mismo'])) {
                     $data_asignar = htmlspecialchars(json_encode(array(
@@ -182,10 +179,6 @@ function mph_get_horarios_table_html( $maestro_id ) {
                      $prog_admisibles_ids = isset($meta['mph_programas_admisibles'][0]) ? explode(',', $meta['mph_programas_admisibles'][0]) : array();
                      $sede_admisibles_ids = isset($meta['mph_sedes_admisibles'][0]) ? explode(',', $meta['mph_sedes_admisibles'][0]) : array();
                      $rango_admisibles_ids = isset($meta['mph_rangos_admisibles'][0]) ? explode(',', $meta['mph_rangos_admisibles'][0]) : array(); // Ojo slug tax
-
-
-
-
                      $data_editar_vacantes = array(
                         // ¿ESTÁ $horario_id AQUÍ? ($horario_id se define al principio del bucle foreach)
                         'horario_id' => $horario_id, // <-- ASEGÚRATE DE QUE ESTA LÍNEA EXISTE Y ES CORRECTA
@@ -213,17 +206,18 @@ function mph_get_horarios_table_html( $maestro_id ) {
 
                  // Botón Editar (para Vacío, Mismo, Mismo o Traslado) -> Editar Disponibilidad General
                  if (in_array($estado, ['Vacío', 'Mismo o Traslado', 'Mismo'])) {
-                     $data_editar_disp = htmlspecialchars(json_encode(array(
-                         'horario_id' => $horario_id,
-                         'dia' => $num_dia,
-                         'inicio_gen' => $hora_inicio, // Usar horas del bloque como base
-                         'fin_gen' => $hora_fin,
-                         'prog_admisibles' => $prog_admisibles_ids,
-                         'sede_admisibles' => $sede_admisibles_ids,
-                         'rango_admisibles' => $rango_admisibles_ids,
-                         // No hay datos de asignación aquí
-                     )), ENT_QUOTES, 'UTF-8');
-                     $acciones_col .= ' | <button type="button" class="button button-link mph-accion-horario mph-accion-editar-disp" data-horario-info="' . $data_editar_disp . '">' . esc_html__('Editar Disp.', 'mi-plugin-horarios') . '</button>'; // Nueva clase y texto
+                     $data_editar_disp = array(
+                    'horario_id' => $horario_id,
+                    'dia' => $num_dia,
+                    'inicio' => $hora_inicio, // Usar horas del bloque como base para el form general
+                    'fin' => $hora_fin,
+                    // Leer los strings CSV de los meta y convertirlos a arrays de IDs
+                    'programas_admisibles' => isset($meta['mph_programas_admisibles'][0]) ? array_map('intval', explode(',', $meta['mph_programas_admisibles'][0])) : array(),
+                    'sedes_admisibles' => isset($meta['mph_sedes_admisibles'][0]) ? array_map('intval', explode(',', $meta['mph_sedes_admisibles'][0])) : array(),
+                    'rangos_admisibles' => isset($meta['mph_rangos_admisibles'][0]) ? array_map('intval', explode(',', $meta['mph_rangos_admisibles'][0])) : array(),
+                );
+                $data_editar_disp_json = htmlspecialchars(json_encode($data_editar_disp), ENT_QUOTES, 'UTF-8');
+                     $acciones_col .= ' | <button type="button" class="button button-link mph-accion-horario mph-accion-editar-disp" data-horario-info="' . $data_editar_disp_json . '">' . esc_html__('Editar Disp.', 'mi-plugin-horarios') . '</button>';
                 }
 
                 // Botón Editar (para Traslado, No Disponible) -> Solo Info (si se implementa)
