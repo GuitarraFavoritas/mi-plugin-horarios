@@ -359,7 +359,7 @@ function mph_ajax_eliminar_horario_callback()
     // wp_send_json_* termina la ejecución
 }
 
-/* Inicia Modificación: Reescribir callback para Vaciar */
+/* Reescribir callback para Vaciar */
 /**
  * Callback para la acción AJAX 'mph_vaciar_horario'.
  *
@@ -406,29 +406,54 @@ function mph_ajax_vaciar_horario_callback() {
     $rango_fusionado_fin = clone $dt_fin_actual;
 
     // Buscar hacia atrás
-    foreach ($horarios_existentes_db as $h_vecino) {
-        $estado_vecino = get_post_meta($h_vecino->ID, 'mph_estado', true);
-        if ($h_vecino->ID != $horario_id && ($estado_vecino === 'Vacío' || $estado_vecino === 'Mismo' || $estado_vecino === 'Mismo o Traslado')) {
-             $dt_fin_vecino = new DateTime($base_date . get_post_meta($h_vecino->ID, 'mph_hora_fin', true));
-             if ($dt_fin_vecino == $rango_fusionado_inicio) { // El vecino termina justo donde empieza nuestro rango fusionado
-                 $rango_fusionado_inicio = new DateTime($base_date . get_post_meta($h_vecino->ID, 'mph_hora_inicio', true));
-                 $ids_a_borrar_para_fusion[] = $h_vecino->ID;
-                 error_log("$log_prefix Fusionando con bloque Vacío/Buffer anterior ID: {$h_vecino->ID}. Nuevo inicio: " . $rango_fusionado_inicio->format('H:i'));
-             }
+    $fusion_continua = true;
+    while ($fusion_continua) {
+        $fusion_continua = false; // Asumir que no habrá más fusiones en esta pasada
+        // Buscar hacia atrás
+        foreach ($horarios_existentes_db as $key => $h_vecino) {
+            if (in_array($h_vecino->ID, $ids_a_borrar_para_fusion)) continue; // Ya está en la lista
+
+            $estado_vecino = get_post_meta($h_vecino->ID, 'mph_estado', true);
+            if ($estado_vecino === 'Vacío' || $estado_vecino === 'Mismo' || $estado_vecino === 'Mismo o Traslado') {
+                try {
+                    $dt_fin_vecino = new DateTime($base_date . get_post_meta($h_vecino->ID, 'mph_hora_fin', true));
+                    if ($dt_fin_vecino == $rango_fusionado_inicio) {
+                        $rango_fusionado_inicio = new DateTime($base_date . get_post_meta($h_vecino->ID, 'mph_hora_inicio', true));
+                        $ids_a_borrar_para_fusion[] = $h_vecino->ID;
+                        error_log("$log_prefix Fusionando con bloque ANTERIOR ID: {$h_vecino->ID}. Nuevo inicio: " . $rango_fusionado_inicio->format('H:i'));
+                        $fusion_continua = true; // Encontramos uno, así que repetimos el bucle while
+                        unset($horarios_existentes_db[$key]); // Optimización: no re-evaluar este vecino
+                        break; // Salir del foreach y reiniciar el while
+                    }
+                } catch (Exception $e) { continue; }
+            }
         }
-    }
+    } // Fin while para buscar hacia atrás
+    
     // Buscar hacia adelante
-     foreach ($horarios_existentes_db as $h_vecino) {
-        $estado_vecino = get_post_meta($h_vecino->ID, 'mph_estado', true);
-        if ($h_vecino->ID != $horario_id && ($estado_vecino === 'Vacío' || $estado_vecino === 'Mismo' || $estado_vecino === 'Mismo o Traslado')) {
-             $dt_inicio_vecino = new DateTime($base_date . get_post_meta($h_vecino->ID, 'mph_hora_inicio', true));
-             if ($dt_inicio_vecino == $rango_fusionado_fin) { // El vecino empieza justo donde termina nuestro rango fusionado
-                 $rango_fusionado_fin = new DateTime($base_date . get_post_meta($h_vecino->ID, 'mph_hora_fin', true));
-                 $ids_a_borrar_para_fusion[] = $h_vecino->ID;
-                 error_log("$log_prefix Fusionando con bloque Vacío/Buffer posterior ID: {$h_vecino->ID}. Nuevo fin: " . $rango_fusionado_fin->format('H:i'));
-             }
+     $fusion_continua = true;
+    while ($fusion_continua) {
+        $fusion_continua = false;
+        // Buscar hacia adelante
+        foreach ($horarios_existentes_db as $key => $h_vecino) {
+            if (in_array($h_vecino->ID, $ids_a_borrar_para_fusion)) continue;
+
+            $estado_vecino = get_post_meta($h_vecino->ID, 'mph_estado', true);
+            if ($estado_vecino === 'Vacío' || $estado_vecino === 'Mismo' || $estado_vecino === 'Mismo o Traslado') {
+                try {
+                    $dt_inicio_vecino = new DateTime($base_date . get_post_meta($h_vecino->ID, 'mph_hora_inicio', true));
+                    if ($dt_inicio_vecino == $rango_fusionado_fin) {
+                        $rango_fusionado_fin = new DateTime($base_date . get_post_meta($h_vecino->ID, 'mph_hora_fin', true));
+                        $ids_a_borrar_para_fusion[] = $h_vecino->ID;
+                        error_log("$log_prefix Fusionando con bloque POSTERIOR ID: {$h_vecino->ID}. Nuevo fin: " . $rango_fusionado_fin->format('H:i'));
+                        $fusion_continua = true;
+                        unset($horarios_existentes_db[$key]);
+                        break;
+                    }
+                } catch (Exception $e) { continue; }
+            }
         }
-    }
+    } // Fin while para buscar hacia adelante
 
     // --- 4. Ejecutar Operaciones de BD ---
     $wpdb->query('START TRANSACTION');
