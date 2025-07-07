@@ -52,7 +52,7 @@ add_action("init", "mph_register_ajax_actions"); // Registrar las acciones al in
 
 function mph_ajax_guardar_horario_maestro_callback() {
     global $wpdb;
-    $log_prefix = "AJAX mph_guardar_horario_maestro (Inteligente V3):"; // Actualizar versión de log
+    $log_prefix = "AJAX mph_guardar_horario_maestro (Inteligente V3 Final):"; // Actualizar versión de log
     error_log("$log_prefix Petición AJAX recibida.");
 
     // --- 1. Seguridad y Sanitización ---

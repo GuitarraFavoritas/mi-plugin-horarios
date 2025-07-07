@@ -46,14 +46,62 @@ function mph_calcular_bloques_horario( $maestro_id, $data ) {
 
     // --- 3. Lógica de División de Tiempo ---
     if ( ! $hay_asignacion ) {
-        // --- 3.a. Caso: Solo Disponibilidad General (Bloque único 'Vacío') ---
-        error_log("$log_prefix Calculando bloque único 'Vacío'.");
-        $sedes_admisibles_filtradas = mph_get_filtered_admisibles_sedes($sedes_admisibles, $inicio_general_str);
-        if (empty($sedes_admisibles_filtradas) && !empty($sedes_admisibles)) {
-            error_log("$log_prefix ADVERTENCIA: Todas las sedes admisibles generales fueron filtradas para Vacío $inicio_general_str-$fin_general_str.");
+        // --- Caso: Solo Disponibilidad General (Dividir si es necesario) ---
+        error_log("$log_prefix Calculando bloque(s) 'Vacío' para la disponibilidad general.");
+
+        // 1. Recolectar todos los puntos de tiempo de cambio
+        $puntos_de_tiempo_str = array(
+            $inicio_general_str,
+            $fin_general_str
+        );
+
+        error_log("$log_prefix Sedes admisibles generales para evaluar cierre: " . print_r($sedes_admisibles, true));
+        // Obtener horas de cierre de las sedes no comunes
+        foreach ($sedes_admisibles as $sede_id) {
+            $es_comun = get_term_meta($sede_id, 'sede_comun', true);
+            if (!$es_comun) {
+                $hora_cierre = get_term_meta($sede_id, 'hora_cierre', true);
+                if ($hora_cierre && preg_match("/^([01]?[0-9]|2[0-3]):[0-5][0-9]$/", $hora_cierre)) {
+                    // Añadir hora de cierre solo si está DENTRO del rango general
+                    if ($hora_cierre > $inicio_general_str && $hora_cierre < $fin_general_str) {
+                         $puntos_de_tiempo_str[] = $hora_cierre;
+                         error_log("$log_prefix Añadido punto de cambio por cierre de Sede ID $sede_id a las $hora_cierre.");
+                    }
+                }
+            }
         }
-        $bloque_vacio = mph_crear_sub_bloque( $maestro_id, $dia_semana, $inicio_general_str, $fin_general_str, 'Vacío', $programas_admisibles, $sedes_admisibles_filtradas, $rangos_admisibles );
-        $bloques_resultantes[] = $bloque_vacio;
+
+        // 2. Ordenar y hacer únicos los puntos de tiempo
+        $puntos_de_tiempo_str = array_unique($puntos_de_tiempo_str);
+        usort($puntos_de_tiempo_str, 'strcmp');
+        error_log("$log_prefix Puntos de tiempo finales para división: " . print_r($puntos_de_tiempo_str, true));
+
+        // 3. Crear un bloque 'Vacío' para cada intervalo resultante
+        for ($i = 0; $i < count($puntos_de_tiempo_str) - 1; $i++) {
+            $intervalo_inicio = $puntos_de_tiempo_str[$i];
+            $intervalo_fin = $puntos_de_tiempo_str[$i+1];
+
+            if ($intervalo_inicio >= $intervalo_fin) continue; // Saltar intervalos sin duración
+
+            error_log("$log_prefix Procesando intervalo Vacío: $intervalo_inicio - $intervalo_fin");
+
+            // 4. Filtrar sedes admisibles para ESTE intervalo específico
+            $sedes_admisibles_para_intervalo = mph_get_filtered_admisibles_sedes($sedes_admisibles, $intervalo_inicio);
+
+            // 5. Crear el bloque solo si hay sedes admisibles para él
+            if (!empty($sedes_admisibles_para_intervalo)) {
+                $bloques_resultantes[] = mph_crear_sub_bloque(
+                    $maestro_id, $dia_semana,
+                    $intervalo_inicio, $intervalo_fin,
+                    'Vacío',
+                    $programas_admisibles,
+                    $sedes_admisibles_para_intervalo,
+                    $rangos_admisibles
+                );
+            } else {
+                 error_log("$log_prefix Saltando intervalo $intervalo_inicio - $intervalo_fin: no quedaron sedes admisibles después de filtrar por hora de cierre.");
+            }
+        }
 
     } else {
         // --- 3.b. Caso: Hay Asignación Específica ---
@@ -81,15 +129,40 @@ function mph_calcular_bloques_horario( $maestro_id, $data ) {
             // --- Punto de referencia para construir bloques ---
             $punto_actual = clone $dt_inicio_general;
 
-            // --- A. Bloque Vacío ANTES del Buffer Antes ---
+            // --- A. Bloque(s) Vacío ANTES del Buffer Antes ---
             $dt_inicio_buffer_antes_calculado = clone $dt_inicio_asignado;
             if ($buffer_antes_min > 0) { $dt_inicio_buffer_antes_calculado->sub(new DateInterval("PT{$buffer_antes_min}M")); }
             $dt_inicio_buffer_antes_real = max($dt_inicio_buffer_antes_calculado, $dt_inicio_general);
 
             if ($dt_inicio_buffer_antes_real > $punto_actual) {
-                error_log("$log_prefix Creando bloque 'Vacío' ANTES.");
-                $sedes_filtradas_vacio_antes = mph_get_filtered_admisibles_sedes($sedes_admisibles, $punto_actual->format('H:i'));
-                $bloques_resultantes[] = mph_crear_sub_bloque( $maestro_id, $dia_semana, $punto_actual->format('H:i'), $dt_inicio_buffer_antes_real->format('H:i'), 'Vacío', $programas_admisibles, $sedes_filtradas_vacio_antes, $rangos_admisibles );
+                error_log("$log_prefix Generando bloque(s) 'Vacío' ANTES del buffer.");
+                // Aplicar misma lógica de división que para un Vacío general
+                $puntos_cambio_vacio_antes = array(
+                    $punto_actual->format('H:i'),
+                    $dt_inicio_buffer_antes_real->format('H:i')
+                );
+                foreach ($sedes_admisibles as $sede_id) {
+                    $es_comun = get_term_meta($sede_id, 'sede_comun', true);
+                    if (!$es_comun) {
+                        $hora_cierre = get_term_meta($sede_id, 'hora_cierre', true);
+                        if ($hora_cierre && $hora_cierre > $punto_actual->format('H:i') && $hora_cierre < $dt_inicio_buffer_antes_real->format('H:i')) {
+                            $puntos_cambio_vacio_antes[] = $hora_cierre;
+                        }
+                    }
+                }
+                $puntos_cambio_vacio_antes = array_unique($puntos_cambio_vacio_antes);
+                usort($puntos_cambio_vacio_antes, 'strcmp');
+
+                for ($i = 0; $i < count($puntos_cambio_vacio_antes) - 1; $i++) {
+                    $intervalo_inicio = $puntos_cambio_vacio_antes[$i];
+                    $intervalo_fin = $puntos_cambio_vacio_antes[$i+1];
+                    if ($intervalo_inicio >= $intervalo_fin) continue;
+
+                    $sedes_filtradas = mph_get_filtered_admisibles_sedes($sedes_admisibles, $intervalo_inicio);
+                    if (!empty($sedes_filtradas)) {
+                        $bloques_resultantes[] = mph_crear_sub_bloque( $maestro_id, $dia_semana, $intervalo_inicio, $intervalo_fin, 'Vacío', $programas_admisibles, $sedes_filtradas, $rangos_admisibles );
+                    }
+                }
                 $punto_actual = clone $dt_inicio_buffer_antes_real;
             }
 
@@ -109,12 +182,11 @@ function mph_calcular_bloques_horario( $maestro_id, $data ) {
 
 
             // --- D. Bloque Buffer DESPUÉS (con posible división por cierre) ---
-            if ($buffer_despues_min > 0 && $punto_actual < $dt_fin_general) { // Solo si hay buffer y espacio en jornada
+            if ($buffer_despues_min > 0 && $punto_actual < $dt_fin_general) {
                 $dt_fin_buffer_potencial_original = clone $punto_actual;
                 $dt_fin_buffer_potencial_original->add(new DateInterval("PT{$buffer_despues_min}M"));
                 $dt_fin_buffer_real_en_jornada = min($dt_fin_buffer_potencial_original, $dt_fin_general);
 
-                // Solo procesar si el buffer resultante tiene duración
                 if ($punto_actual < $dt_fin_buffer_real_en_jornada) {
                     $hora_cierre_sede_clase = null; $es_sede_clase_comun = false;
                     if ($sede_asignada > 0) {
@@ -128,100 +200,109 @@ function mph_calcular_bloques_horario( $maestro_id, $data ) {
                         try { $dt_hora_cierre_clase = new DateTime($base_date . $hora_cierre_sede_clase); } catch (Exception $e) {}
                     }
 
-                    // Caso 1: Sede de la clase cierra ANTES o AL INICIO de este buffer
-                    if ($dt_hora_cierre_clase && $dt_hora_cierre_clase <= $punto_actual) { // $punto_actual es $dt_fin_asignado aquí
-                        error_log("$log_prefix Sede $sede_asignada ya cerró o cierra al fin de la clase. Buffer después completo es afectado.");
-                        $estado_buffer_total = mph_determinar_estado_buffer( $maestro_id, $dia_semana, $punto_actual->format('H:i'), $dt_fin_buffer_real_en_jornada->format('H:i'), 'despues', $sede_asignada, $inicio_general_str, $fin_general_str );
-                        
-                        // VERIFICACIÓN PARA TRASLADO (Escenario 2.2)
-                        if ($estado_buffer_total === 'No Disponible' && $dt_fin_buffer_real_en_jornada < $dt_fin_jornada) {
-                            $sedes_para_siguiente_vacio = mph_get_filtered_admisibles_sedes($sedes_admisibles, $dt_fin_buffer_real_en_jornada->format('H:i'));
-                            $hay_fisica_siguiente = false;
-                            foreach($sedes_para_siguiente_vacio as $s_id) { if(!get_term_meta($s_id, 'sede_comun', true)) {$hay_fisica_siguiente = true; break;} }
-                            if ($hay_fisica_siguiente) {
-                                error_log("$log_prefix CAMBIANDO estado de buffer post-cierre a TRASLADO porque hay Vacío con física después.");
-                                $estado_buffer_total = 'Traslado';
-                            }
-                        }
-
-                        $bloques_resultantes[] = mph_crear_sub_bloque( $maestro_id, $dia_semana, $punto_actual->format('H:i'), $dt_fin_buffer_real_en_jornada->format('H:i'), $estado_buffer_total, $programas_admisibles, $sedes_admisibles, $rangos_admisibles, 0, $programa_asignado, $sede_asignada, $rango_asignado, $buffer_antes_min, $buffer_despues_min, $sede_asignada );
-                        $punto_actual = clone $dt_fin_buffer_real_en_jornada;
-                    }
-                    // Caso 2: Sede de la clase cierra DURANTE este buffer
-                    elseif ($dt_hora_cierre_clase && $dt_hora_cierre_clase > $punto_actual && $dt_hora_cierre_clase < $dt_fin_buffer_real_en_jornada) {
+                    // Caso 1: Sede cierra DURANTE este buffer -> DIVIDIR
+                    if ($dt_hora_cierre_clase && $dt_hora_cierre_clase > $punto_actual && $dt_hora_cierre_clase < $dt_fin_buffer_real_en_jornada) {
                         error_log("$log_prefix Sede $sede_asignada cierra DURANTE el buffer después. Dividiendo buffer.");
-                        // Parte A del buffer: Antes del cierre
-                        $estado_buffer_parte1 = mph_determinar_estado_buffer( $maestro_id, $dia_semana, $punto_actual->format('H:i'), $dt_hora_cierre_clase->format('H:i'), 'despues', $sede_asignada, $inicio_general_str, $fin_general_str );
+
+                        // Parte A del buffer (antes del cierre)
+                        $hay_fisica_despues_parte_A = true;
+                        $estado_buffer_parte1 = mph_determinar_estado_buffer( $maestro_id, $dia_semana, $punto_actual->format('H:i'), $dt_hora_cierre_clase->format('H:i'), 'despues', $sede_asignada, $inicio_general_str, $fin_general_str, $hay_fisica_despues_parte_A );
                         $bloques_resultantes[] = mph_crear_sub_bloque( $maestro_id, $dia_semana, $punto_actual->format('H:i'), $dt_hora_cierre_clase->format('H:i'), $estado_buffer_parte1, $programas_admisibles, $sedes_admisibles, $rangos_admisibles, 0, $programa_asignado, $sede_asignada, $rango_asignado, $buffer_antes_min, $buffer_despues_min, $sede_asignada );
-                        // Parte B del buffer: Después del cierre
-                        $estado_buffer_parte2 = mph_determinar_estado_buffer( $maestro_id, $dia_semana, $dt_hora_cierre_clase->format('H:i'), $dt_fin_buffer_real_en_jornada->format('H:i'), 'despues', $sede_asignada, $inicio_general_str, $fin_general_str );
 
-                        // VERIFICACIÓN PARA TRASLADO (Escenario 2.2) para Parte B
-                        if ($estado_buffer_parte2 === 'No Disponible' && $dt_fin_buffer_real_en_jornada < $dt_fin_jornada) {
+                        // Parte B del buffer (después del cierre)
+                        $hay_fisica_despues_parte_B = false;
+                        if ($dt_fin_buffer_real_en_jornada < $dt_fin_general) {
                             $sedes_para_siguiente_vacio = mph_get_filtered_admisibles_sedes($sedes_admisibles, $dt_fin_buffer_real_en_jornada->format('H:i'));
-                            $hay_fisica_siguiente = false;
-                            foreach($sedes_para_siguiente_vacio as $s_id) { if(!get_term_meta($s_id, 'sede_comun', true)) {$hay_fisica_siguiente = true; break;} }
-                            if ($hay_fisica_siguiente) {
-                                error_log("$log_prefix CAMBIANDO estado de Parte B del buffer a TRASLADO.");
-                                $estado_buffer_parte2 = 'Traslado';
-                            }
-                        } 
-
+                            foreach($sedes_para_siguiente_vacio as $s_id) { if(!get_term_meta($s_id, 'sede_comun', true)) {$hay_fisica_despues_parte_B = true; break;} }
+                        }
+                        $estado_buffer_parte2 = mph_determinar_estado_buffer( $maestro_id, $dia_semana, $dt_hora_cierre_clase->format('H:i'), $dt_fin_buffer_real_en_jornada->format('H:i'), 'despues', $sede_asignada, $inicio_general_str, $fin_general_str, $hay_fisica_despues_parte_B );
                         $bloques_resultantes[] = mph_crear_sub_bloque( $maestro_id, $dia_semana, $dt_hora_cierre_clase->format('H:i'), $dt_fin_buffer_real_en_jornada->format('H:i'), $estado_buffer_parte2, $programas_admisibles, $sedes_admisibles, $rangos_admisibles, 0, $programa_asignado, $sede_asignada, $rango_asignado, $buffer_antes_min, $buffer_despues_min, $sede_asignada );
+                        
                         $punto_actual = clone $dt_fin_buffer_real_en_jornada;
-                    }
-                    // Caso 3: Sede de la clase no cierra o cierra después del buffer
-                    else {
-                        error_log("$log_prefix Sede $sede_asignada no afecta el buffer después o cierra después. Procesando buffer completo.");
-                        $estado_buffer_total = mph_determinar_estado_buffer( $maestro_id, $dia_semana, $punto_actual->format('H:i'), $dt_fin_buffer_real_en_jornada->format('H:i'), 'despues', $sede_asignada, $inicio_general_str, $fin_general_str );
+
+                    } else { // Caso 2: El buffer NO se divide por cierre
+                        error_log("$log_prefix Buffer después no se divide por cierre. Procesando buffer completo.");
+                        $hay_fisica_despues = false;
+                        if ($dt_fin_buffer_real_en_jornada < $dt_fin_general) {
+                            $sedes_para_siguiente_vacio = mph_get_filtered_admisibles_sedes($sedes_admisibles, $dt_fin_buffer_real_en_jornada->format('H:i'));
+                            foreach($sedes_para_siguiente_vacio as $s_id) { if(!get_term_meta($s_id, 'sede_comun', true)) {$hay_fisica_despues = true; break;} }
+                        }
+                        $estado_buffer_total = mph_determinar_estado_buffer( $maestro_id, $dia_semana, $punto_actual->format('H:i'), $dt_fin_buffer_real_en_jornada->format('H:i'), 'despues', $sede_asignada, $inicio_general_str, $fin_general_str, $hay_fisica_despues );
                         $bloques_resultantes[] = mph_crear_sub_bloque( $maestro_id, $dia_semana, $punto_actual->format('H:i'), $dt_fin_buffer_real_en_jornada->format('H:i'), $estado_buffer_total, $programas_admisibles, $sedes_admisibles, $rangos_admisibles, 0, $programa_asignado, $sede_asignada, $rango_asignado, $buffer_antes_min, $buffer_despues_min, $sede_asignada );
                         $punto_actual = clone $dt_fin_buffer_real_en_jornada;
                     }
-                } else {
-                     error_log("$log_prefix Buffer después sin duración válida en jornada.");
                 }
-            } else {
-                 error_log("$log_prefix No hay buffer después definido (0 min) o no hay espacio.");
-            }
+            }                  
 
-            // --- E. Bloque Vacío DESPUÉS de todo ---
+            // --- E. Bloque(s) Vacío DESPUÉS de todo ---
             if ($punto_actual < $dt_fin_general) {
-                $sedes_filtradas_vacio_despues = mph_get_filtered_admisibles_sedes($sedes_admisibles, $punto_actual->format('H:i'));
-
-                $solo_comunes_quedan = true;
-                if (!empty($sedes_filtradas_vacio_despues)) {
-                    foreach($sedes_filtradas_vacio_despues as $id_sede_filtrada) {
-                        $es_comun = get_term_meta($id_sede_filtrada, 'sede_comun', true);
-                        if (empty($es_comun) || $es_comun !== '1') { $solo_comunes_quedan = false; break; }
+                error_log("$log_prefix Generando bloque(s) 'Vacío' DESPUES.");
+                $puntos_cambio_vacio_despues = array(
+                    $punto_actual->format('H:i'),
+                    $dt_fin_general->format('H:i')
+                );
+                foreach ($sedes_admisibles as $sede_id) {
+                    $es_comun = get_term_meta($sede_id, 'sede_comun', true);
+                    if (!$es_comun) {
+                        $hora_cierre = get_term_meta($sede_id, 'hora_cierre', true);
+                        if ($hora_cierre && $hora_cierre > $punto_actual->format('H:i') && $hora_cierre < $dt_fin_general->format('H:i')) {
+                            $puntos_cambio_vacio_despues[] = $hora_cierre;
+                        }
                     }
-                } else { $solo_comunes_quedan = true; } // También si no queda ninguna sede
+                }
+                $puntos_cambio_vacio_despues = array_unique($puntos_cambio_vacio_despues);
+                usort($puntos_cambio_vacio_despues, 'strcmp');
 
-                // Obtener el último bloque creado ANTES de este potencial Vacío
-                $ultimo_bloque_previo = end($bloques_resultantes);
-                $estado_ultimo_bloque_previo = $ultimo_bloque_previo ? $ultimo_bloque_previo['estado'] : null;
+                for ($i = 0; $i < count($puntos_cambio_vacio_despues) - 1; $i++) {
+                    $intervalo_inicio = $puntos_cambio_vacio_despues[$i];
+                    $intervalo_fin = $puntos_cambio_vacio_despues[$i+1];
+                    if ($intervalo_inicio >= $intervalo_fin) continue;
 
-                if ($estado_ultimo_bloque_previo === 'No Disponible' && $solo_comunes_quedan) {
-                    error_log("$log_prefix Extender bloque 'No Disponible' anterior hasta el fin de jornada.");
-                    $key_ultimo = array_key_last($bloques_resultantes);
-                    if ($key_ultimo !== null) {
-                        $bloques_resultantes[$key_ultimo]['hora_fin'] = $dt_fin_general->format('H:i');
-                        $bloques_resultantes[$key_ultimo]['meta_input']['mph_hora_fin'] = $dt_fin_general->format('H:i');
-                        $bloques_resultantes[$key_ultimo]['post_title'] = sprintf("Maestro %d - Día %d - %s-%s - %s", $maestro_id, $dia_semana, $bloques_resultantes[$key_ultimo]['hora_inicio'], $dt_fin_general->format('H:i'), $estado_ultimo_bloque_previo);
+                    $sedes_filtradas = mph_get_filtered_admisibles_sedes($sedes_admisibles, $intervalo_inicio);
+
+                    // Lógica para extender No Disponible anterior (si aplica)
+                    $ultimo_bloque_creado = end($bloques_resultantes);
+                    $estado_ultimo_bloque = $ultimo_bloque_creado ? $ultimo_bloque_creado['estado'] : null;
+                    $solo_comunes_quedan = true;
+                    if (!empty($sedes_filtradas)) {
+                        foreach($sedes_filtradas as $id_sede_filtrada) { if (!get_term_meta($id_sede_filtrada, 'sede_comun', true)) { $solo_comunes_quedan = false; break; } }
                     }
-                } else {
-                    // Crear bloque Vacío si hay sedes (físicas o comunes) o si el último no fue 'No Disponible'
-                     if (!empty($sedes_filtradas_vacio_despues)) {
-                         error_log("$log_prefix Creando bloque 'Vacío' DESPUES con sedes filtradas.");
-                         $bloques_resultantes[] = mph_crear_sub_bloque( $maestro_id, $dia_semana, $punto_actual->format('H:i'), $dt_fin_general->format('H:i'), 'Vacío', $programas_admisibles, $sedes_filtradas_vacio_despues, $rangos_admisibles );
-                     } else {
-                         error_log("$log_prefix No se crea bloque 'Vacío' DESPUES: no hay sedes admisibles restantes (ni físicas ni comunes).");
-                         // Si llegamos aquí, y el último bloque fue un buffer, ese buffer podría necesitar
-                         // cambiar su estado a 'Mismo' si ahora es el fin real de la actividad.
-                         // Esta lógica de re-evaluación es para la Fase 2.5 (Actualización Inteligente).
-                     }
+
+                    if ($estado_ultimo_bloque === 'No Disponible' && $solo_comunes_quedan) {
+                         // Extender
+                        error_log("$log_prefix Extender bloque 'No Disponible' anterior para cubrir intervalo $intervalo_inicio-$intervalo_fin.");
+                        $key_ultimo = array_key_last($bloques_resultantes);
+                        if ($key_ultimo !== null) {
+                            $bloques_resultantes[$key_ultimo]['hora_fin'] = $intervalo_fin;
+                            $bloques_resultantes[$key_ultimo]['meta_input']['mph_hora_fin'] = $intervalo_fin;
+                            $bloques_resultantes[$key_ultimo]['post_title'] = sprintf("Maestro %d - Día %d - %s-%s - %s", $maestro_id, $dia_semana, $bloques_resultantes[$key_ultimo]['hora_inicio'], $dt_fin_general->format('H:i'), $estado_ultimo_bloque_previo);
+
+                    // El bloque anterior al que acabamos de extender es ahora el penúltimo del array.
+                    $key_penultimo = count($bloques_resultantes) >= 2 ? array_keys($bloques_resultantes)[count($bloques_resultantes)-2] : null;
+
+                    if ($key_penultimo !== null) {
+                        // Si el penúltimo bloque es un 'Mismo o Traslado', ahora debe ser 'Mismo'
+                        // porque lo que le sigue es un cierre definitivo de actividad.
+                        if ($bloques_resultantes[$key_penultimo]['estado'] === 'Mismo o Traslado') {
+                             error_log("$log_prefix Re-evaluando estado del bloque penúltimo (ID temporal) a 'Mismo' porque es sucedido por 'No Disponible' extendido.");
+                             $bloques_resultantes[$key_penultimo]['estado'] = 'Mismo';
+                             $bloques_resultantes[$key_penultimo]['meta_input']['mph_estado'] = 'Mismo';
+                             // Actualizar título también
+                             $bloques_resultantes[$key_penultimo]['post_title'] = sprintf("Maestro %d - Día %d - %s-%s - %s",
+                                $maestro_id, $dia_semana,
+                                $bloques_resultantes[$key_penultimo]['hora_inicio'],
+                                $bloques_resultantes[$key_penultimo]['hora_fin'],
+                                'Mismo'
+                            );
+                        }
+                    }
+                }
+                } elseif (!empty($sedes_filtradas)) {
+                        // Crear Vacío normal
+                        $bloques_resultantes[] = mph_crear_sub_bloque( $maestro_id, $dia_semana, $intervalo_inicio, $intervalo_fin, 'Vacío', $programas_admisibles, $sedes_filtradas, $rangos_admisibles );
+                    }
                 }
             }
-            /* Finaliza Modificación */
 
          } catch (Exception $e) {
              error_log("$log_prefix EXCEPCION al procesar fechas: " . $e->getMessage());
