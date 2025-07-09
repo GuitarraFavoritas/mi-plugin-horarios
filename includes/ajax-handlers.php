@@ -50,9 +50,9 @@ add_action("init", "mph_register_ajax_actions"); // Registrar las acciones al in
  * y devuelve una respuesta JSON.
  */
 
-function mph_ajax_guardar_horario_maestro_callback() {
+function mph_ajax_guardar_horario_maestro_callback() { // Línea 53
     global $wpdb;
-    $log_prefix = "AJAX mph_guardar_horario_maestro (Inteligente V3 Final):"; // Actualizar versión de log
+    $log_prefix = "AJAX mph_guardar_horario_maestro (Inteligente V3.1 Corregida):"; // Nueva versión
     error_log("$log_prefix Petición AJAX recibida.");
 
     // --- 1. Seguridad y Sanitización ---
@@ -66,8 +66,8 @@ function mph_ajax_guardar_horario_maestro_callback() {
     if ( ! current_user_can( 'edit_others_posts' ) ) { error_log("$log_prefix Error: Permisos."); wp_send_json_error( array( 'message' => __( 'Sin permisos.', 'mi-plugin-horarios' ) ), 403 ); return; }
     error_log("$log_prefix Permisos verificados.");
 
+    // --- 2. Obtención y Sanitización de Datos POST ---
     $sanitized_data = array(); // Array para datos limpios
-    // Llenar $sanitized_data con todos los campos POST sanitizados...
     $sanitized_data['maestro_id'] = isset($_POST['maestro_id']) ? intval($_POST['maestro_id']) : 0;
     $sanitized_data['dia_semana'] = isset($_POST['dia_semana']) ? intval($_POST['dia_semana']) : 0;
     $sanitized_data['hora_inicio_general'] = isset($_POST['hora_inicio_general']) ? sanitize_text_field($_POST['hora_inicio_general']) : '';
@@ -89,7 +89,7 @@ function mph_ajax_guardar_horario_maestro_callback() {
     $id_bloque_original_operacion = isset($_POST['horario_id']) ? intval($_POST['horario_id']) : 0;
     // error_log("$log_prefix Datos POST sanitizados. ID original para operación: $id_bloque_original_operacion");
 
-    // --- 2. Calcular Bloques Nuevos/Ideales ---
+    // --- 3. Calcular Bloques Nuevos/Ideales ---
     $bloques_calculados_nuevos = mph_calcular_bloques_horario( $sanitized_data['maestro_id'], $sanitized_data );
     if ( is_wp_error( $bloques_calculados_nuevos ) ) { wp_send_json_error( array( 'message' => $bloques_calculados_nuevos->get_error_message() ), 400 ); return; }
     error_log("$log_prefix " . count($bloques_calculados_nuevos) . " bloques 'nuevos' calculados (estado ideal).");
@@ -101,132 +101,112 @@ function mph_ajax_guardar_horario_maestro_callback() {
     $posts_borrados_ids = array();
     $base_date = '1970-01-01 '; // Para comparaciones de DateTime si es necesario
 
-    // --- 3. Obtener TODOS los horarios existentes del maestro para ESE DÍA ---
+    // --- 4. Obtener Horarios Existentes y Crear Línea de Tiempo ---
     $horarios_existentes_db_dia = mph_get_horarios_existentes_dia( $sanitized_data['maestro_id'], $sanitized_data['dia_semana'] );
     error_log("$log_prefix Encontrados " . count($horarios_existentes_db_dia) . " horarios existentes en BD para el día.");
 
-    /* Lógica de Actualización Inteligente V3 */
-
-    // A. Mapear Nuevos Bloques Calculados por "INICIO-FIN" para búsqueda eficiente
-    $mapa_nuevos_por_intervalo = array();
-    foreach ($bloques_calculados_nuevos as $b_nuevo) {
-        $mapa_nuevos_por_intervalo[$b_nuevo['hora_inicio'] . '-' . $b_nuevo['hora_fin']] = $b_nuevo;
+    $puntos_de_tiempo_str = array();
+    foreach ($horarios_existentes_db_dia as $h_existente) { // <-- USAR VARIABLE CORRECTA
+        $puntos_de_tiempo_str[] = get_post_meta($h_existente->ID, 'mph_hora_inicio', true);
+        $puntos_de_tiempo_str[] = get_post_meta($h_existente->ID, 'mph_hora_fin', true);
     }
+    foreach ($bloques_calculados_nuevos as $b_nuevo) {
+        $puntos_de_tiempo_str[] = $b_nuevo['hora_inicio'];
+        $puntos_de_tiempo_str[] = $b_nuevo['hora_fin'];
+    }
+    $puntos_de_tiempo_str = array_filter(array_unique($puntos_de_tiempo_str));
+    usort($puntos_de_tiempo_str, 'strcmp');
+    error_log("$log_prefix Puntos de tiempo: " . print_r($puntos_de_tiempo_str, true));
 
-    // B. Iterar sobre Bloques Existentes: Decidir si Actualizar o Borrar
-    $ids_existentes_que_se_mantienen_o_actualizan = array();
 
-    foreach ($horarios_existentes_db_dia as $h_existente) {
-        $id_existente = $h_existente->ID;
-        $inicio_existente_str = get_post_meta($id_existente, 'mph_hora_inicio', true);
-        $fin_existente_str = get_post_meta($id_existente, 'mph_hora_fin', true);
-        if (!$inicio_existente_str || !$fin_existente_str) continue;
+    // --- 5. Decidir Operaciones por Intervalo Atómico ---
+    $operaciones = array('crear' => array(), 'actualizar' => array(), 'borrar' => array());
 
-        $intervalo_existente_key = $inicio_existente_str . '-' . $fin_existente_str;
+    for ($i = 0; $i < count($puntos_de_tiempo_str) - 1; $i++) {
+        $intervalo_inicio = $puntos_de_tiempo_str[$i];
+        $intervalo_fin = $puntos_de_tiempo_str[$i+1];
+        if ($intervalo_inicio >= $intervalo_fin) continue;
 
-        if (isset($mapa_nuevos_por_intervalo[$intervalo_existente_key])) {
-            // Hay un NUEVO bloque calculado que tiene EXACTAMENTE las mismas horas.
-            $b_nuevo_coincidente = $mapa_nuevos_por_intervalo[$intervalo_existente_key];
-            error_log("$log_prefix Existente ID $id_existente ($intervalo_existente_key) tiene un nuevo bloque coincidente en tiempo.");
+        $intervalo_key = "$intervalo_inicio-$intervalo_fin";
+        error_log("$log_prefix Procesando intervalo: $intervalo_key");
 
-            if (mph_bloques_son_diferentes_en_meta($id_existente, $b_nuevo_coincidente['meta_input'])) {
-                error_log("$log_prefix -> Metas diferentes. ACTUALIZANDO post ID $id_existente. Nuevo estado: {$b_nuevo_coincidente['estado']}.");
-                $update_args = array(
-                    'ID' => $id_existente,
-                    'post_title' => sanitize_text_field($b_nuevo_coincidente['post_title']),
-                    'meta_input' => $b_nuevo_coincidente['meta_input'], // Contiene todos los metas mph_*
-                );
-                $update_result = wp_update_post($update_args, true); // true para WP_Error
-                if (is_wp_error($update_result)) {
-                    $errores_operacion[] = "Error actualizando ID $id_existente: " . $update_result->get_error_message();
+        $bloque_existente_en_intervalo = null;
+        foreach($horarios_existentes_db_dia as $h) { if(get_post_meta($h->ID, 'mph_hora_inicio', true) <= $intervalo_inicio && get_post_meta($h->ID, 'mph_hora_fin', true) >= $intervalo_fin) {$bloque_existente_en_intervalo = $h; break;} }
+        $bloque_nuevo_para_intervalo = null;
+        foreach($bloques_calculados_nuevos as $b_n) { if($b_n['hora_inicio'] <= $intervalo_inicio && $b_n['hora_fin'] >= $intervalo_fin) {$bloque_nuevo_para_intervalo = $b_n; break;} }
+
+        if ($bloque_nuevo_para_intervalo && !$bloque_existente_en_intervalo) {
+            $operaciones['crear'][$intervalo_key] = $bloque_nuevo_para_intervalo;
+            error_log("$log_prefix Acción para $intervalo_key: CREAR.");
+        }
+        elseif (!$bloque_nuevo_para_intervalo && $bloque_existente_en_intervalo) {
+            $operaciones['borrar'][$bloque_existente_en_intervalo->ID] = true;
+            error_log("$log_prefix Acción para $intervalo_key: BORRAR ID {$bloque_existente_en_intervalo->ID}.");
+        }
+        elseif ($bloque_nuevo_para_intervalo && $bloque_existente_en_intervalo) {
+            $mismas_horas = (get_post_meta($bloque_existente_en_intervalo->ID, 'mph_hora_inicio', true) === $bloque_nuevo_para_intervalo['hora_inicio'] &&
+                             get_post_meta($bloque_existente_en_intervalo->ID, 'mph_hora_fin', true) === $bloque_nuevo_para_intervalo['hora_fin']);
+            if ($mismas_horas) {
+                if (mph_bloques_son_diferentes_en_meta($bloque_existente_en_intervalo->ID, $bloque_nuevo_para_intervalo['meta_input'])) {
+                    $operaciones['actualizar'][$bloque_existente_en_intervalo->ID] = $bloque_nuevo_para_intervalo;
+                    error_log("$log_prefix Acción para $intervalo_key: ACTUALIZAR ID {$bloque_existente_en_intervalo->ID}.");
                 } else {
-                    $posts_actualizados_ids[] = $id_existente;
+                     error_log("$log_prefix Acción para $intervalo_key: NADA (idénticos).");
                 }
             } else {
-                error_log("$log_prefix -> Metas idénticas. Bloque existente ID $id_existente se MANTIENE sin cambios.");
+                 $operaciones['borrar'][$bloque_existente_en_intervalo->ID] = true;
+                 $operaciones['crear'][$intervalo_key] = $bloque_nuevo_para_intervalo;
+                 error_log("$log_prefix Acción para $intervalo_key: BORRAR ID {$bloque_existente_en_intervalo->ID} y CREAR nuevo (horas difieren).");
             }
-            $ids_existentes_que_se_mantienen_o_actualizan[$id_existente] = true;
-            // Marcar este nuevo como "manejado" para no insertarlo después
-            $mapa_nuevos_por_intervalo[$intervalo_existente_key]['manejado_inteligentemente'] = true;
-        }
-        // Si no hay un nuevo bloque con el mismo tiempo exacto, el existente será borrado en el siguiente paso si no se marcó para mantener.
-    }
-
-    // C. Borrar Bloques Existentes que NO fueron Mantenidos ni Actualizados
-    // (Es decir, aquellos que no encontraron un nuevo bloque con su mismo horario exacto,
-    // o aquellos que se solapan con el rango de la operación de forma que deben ser reemplazados)
-    // La lógica actual de $mapa_nuevos_por_intervalo y $ids_existentes_que_se_mantienen_o_actualizan
-    // ya identifica qué actualizar/mantener. Los que no están en $ids_existentes_que_se_mantienen_o_actualizan
-    // y SÍ ESTÁN EN EL RANGO DE LA OPERACIÓN son candidatos a borrado.
-    // Para simplificar: Borraremos los que NO están en $ids_existentes_que_se_mantienen_o_actualizan
-    // Y que además se solapen con el rango general de la operación.
-    // Esta es la parte más delicada de la "actualización inteligente" sin una comparación intervalo a intervalo.
-
-    // Si $id_bloque_original_si_edita se pasó, y no está en $ids_existentes_que_se_mantienen_o_actualizan,
-    // significa que su tiempo cambió tanto que se considera un borrado y creación.
-    if ($id_bloque_original_si_edita > 0 && !isset($ids_existentes_que_se_mantienen_o_actualizan[$id_bloque_original_si_edita])) {
-         error_log("$log_prefix ID Original $id_bloque_original_si_edita no fue mantenido/actualizado (tiempo cambió drásticamente). BORRANDO.");
-         if (get_post_status($id_bloque_original_si_edita)) { // Comprobar si aún existe
-            $delete_result = wp_delete_post($id_bloque_original_si_edita, true);
-            if ($delete_result) $posts_borrados_ids[] = $id_bloque_original_si_edita; else $errores_operacion[] = "Error borrando ID original $id_bloque_original_si_edita";
-         }
-    }
-
-    // Iterar de nuevo sobre los existentes para borrar los que no fueron marcados y se solapan con la operación
-    // Esto es para limpiar fragmentos que quedan si un bloque grande se reemplaza por uno más pequeño.
-    // Definir rango de operación con DateTime
-    $dt_op_inicio_obj = new DateTime($base_date . $sanitized_data['hora_inicio_general']);
-    $dt_op_fin_obj = new DateTime($base_date . $sanitized_data['hora_fin_general']);
-
-    foreach ($horarios_existentes_db_dia as $h_existente) {
-        $id_existente = $h_existente->ID;
-        if (isset($ids_existentes_que_se_mantienen_o_actualizan[$id_existente])) {
-            continue; // Ya manejado (se mantiene o actualizó)
-        }
-        // Si ya fue borrado (porque era el original), no intentar de nuevo.
-        if (in_array($id_existente, $posts_borrados_ids)) {
-            continue;
-        }
-
-        $inicio_existente_str = get_post_meta($id_existente, 'mph_hora_inicio', true);
-        $fin_existente_str = get_post_meta($id_existente, 'mph_hora_fin', true);
-        if (!$inicio_existente_str || !$fin_existente_str) continue;
-
-        try {
-            $dt_existente_inicio_obj = new DateTime($base_date . $inicio_existente_str);
-            $dt_existente_fin_obj = new DateTime($base_date . $fin_existente_str);
-
-            // ¿Este bloque existente (no mantenido/actualizado) se solapa con el rango de operación?
-            $se_solapa_con_operacion = ($dt_existente_inicio_obj < $dt_op_fin_obj && $dt_existente_fin_obj > $dt_op_inicio_obj);
-
-            if ($se_solapa_con_operacion) {
-                 error_log("$log_prefix Bloque existente ID $id_existente ($inicio_existente_str-$fin_existente_str) no mantenido y solapa operación. BORRANDO.");
-                 $delete_result = wp_delete_post($id_existente, true);
-                 if ($delete_result) $posts_borrados_ids[] = $id_existente; else $errores_operacion[] = "Error borrando solapado $id_existente";
-            }
-        } catch (Exception $e) { continue; }
-    }
-    $posts_borrados_ids = array_unique($posts_borrados_ids);
-
-
-    // D. Insertar los Nuevos Bloques Calculados que NO fueron "manejados_inteligentemente"
-    foreach ($mapa_nuevos_por_intervalo as $interval_key => $b_nuevo) {
-        if (empty($b_nuevo['manejado_inteligentemente'])) {
-            error_log("$log_prefix Insertando nuevo bloque (no coincidió para update): " . $b_nuevo['post_title']);
-            $post_data = array(
-                'post_type'    => 'horario',
-                'post_title'   => sanitize_text_field( $b_nuevo['post_title'] ),
-                'post_status'  => 'publish',
-                'post_author'  => get_current_user_id(),
-                'meta_input'   => $b_nuevo['meta_input'],
-            );
-            $new_post_id = wp_insert_post( $post_data, true );
-            if (is_wp_error($new_post_id)) $errores_operacion[] = $new_post_id->get_error_message();
-            else $posts_creados_ids[] = $new_post_id;
         }
     }
 
-    // --- 6. Finalizar Transacción y Enviar Respuesta ---
+    // --- 6. Ejecutar Operaciones de BD ---
+    // BORRAR
+    error_log("$log_prefix Ejecutando " . count($operaciones['borrar']) . " operaciones de BORRADO.");
+    foreach (array_keys($operaciones['borrar']) as $id_a_borrar) {
+        if (!wp_delete_post($id_a_borrar, true)) {
+            $errores_operacion[] = "Fallo al borrar post ID $id_a_borrar.";
+        } else {
+             $posts_borrados_ids[] = $id_a_borrar;
+        }
+    }
+
+    // ACTUALIZAR
+    error_log("$log_prefix Ejecutando " . count($operaciones['actualizar']) . " operaciones de ACTUALIZACIÓN.");
+    foreach ($operaciones['actualizar'] as $id_a_actualizar => $b_nuevo_data) {
+        $update_args = array(
+            'ID'         => $id_a_actualizar,
+            'post_title' => sanitize_text_field($b_nuevo_data['post_title']),
+            'meta_input' => $b_nuevo_data['meta_input']
+        );
+        $update_result = wp_update_post($update_args, true);
+        if (is_wp_error($update_result)) {
+            $errores_operacion[] = "Fallo al actualizar post ID $id_a_actualizar: " . $update_result->get_error_message();
+        } else {
+            $posts_actualizados_ids[] = $id_a_actualizar;
+        }
+    }
+
+    // CREAR
+    error_log("$log_prefix Ejecutando " . count($operaciones['crear']) . " operaciones de CREACIÓN.");
+    foreach ($operaciones['crear'] as $b_nuevo) {
+        $post_data = array(
+             'post_type'    => 'horario',
+             'post_title'   => sanitize_text_field( $b_nuevo['post_title'] ),
+             'post_status'  => 'publish',
+             'post_author'  => get_current_user_id(),
+             'meta_input'   => $b_nuevo['meta_input']
+         );
+        $new_post_id = wp_insert_post($post_data, true);
+         if ( is_wp_error( $new_post_id ) ) {
+            $errores_operacion[] = "Fallo al crear nuevo bloque '{$b_nuevo['post_title']}': " . $new_post_id->get_error_message();
+        } else {
+             $posts_creados_ids[] = $new_post_id;
+        }
+    }
+
+    // --- 7. Finalizar Transacción y Enviar Respuesta ---
     if (empty($errores_operacion)) {
         $wpdb->query('COMMIT');
         error_log("$log_prefix Éxito. Creados:".count($posts_creados_ids).", Actualizados:".count($posts_actualizados_ids).", Borrados:".count($posts_borrados_ids));
@@ -242,7 +222,7 @@ function mph_ajax_guardar_horario_maestro_callback() {
         wp_send_json_error( array( 'message' => __( 'Errores al guardar: ', 'mi-plugin-horarios' ) . $error_string ), 500 );
     }
 
-} // Fin de mph_ajax_guardar_horario_maestro_callback
+} // Fin de mph_ajax_guardar_horario_maestro_callback // Línea 258
 
 
 /**
